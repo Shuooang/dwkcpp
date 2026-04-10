@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup Label="UserMacros">
+    <MYPROJ>C:\Dropbox\Proj</MYPROJ>
+    <VSOUTDIR>C:\VSOutput\OutDir</VSOUTDIR>
+    <VSINTDIR>C:\VSOutput\IntDir</VSINTDIR>
+  </PropertyGroup>
+
+<!-- 조건을 줄수 있다. MYPROJ는 개인 프로젝트에만 쓴다.
+회사 프로젝트에서는 mklink로 붙여서 쓴다. -->
+<!-- PropertyGroup Condition="'$(Configuration)'=='Debug'" -->
+
+  <PropertyGroup>
+    <OutDir>$(VSOUTDIR)\$(SolutionName)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(VSINTDIR)\$(SolutionName)\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+   <ClCompile>
+    <PreprocessorDefinitions>
+      PROJECT_NAME="$(ProjectName)";
+      %(PreprocessorDefinitions)
+    </PreprocessorDefinitions>
+   </ClCompile>
+  </ItemDefinitionGroup>
+
+</Project>

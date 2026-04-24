@@ -13,7 +13,7 @@ UCTOOLDYNAMIC std::shared_ptr<std::map<std::wstring, std::function<void* ()>>> G
 }
 
 SET_FACTORY(Matrix_Temp);
-DWKREMINDER("Matrix_Temp 는 lib에 있으므로 export 하지 않는다. SET_FACTORY_NOEXPORT")
+//DWKREMINDER("Matrix_Temp 는 lib에 있으므로 export 하지 않는다. SET_FACTORY_NOEXPORT")
 //IMPLEMENT_DYNAMIC(CJXArchive, CArchive)
 
 void Matrix_Temp::DocSerialize(CArchive& ard)
@@ -428,7 +428,7 @@ std::string GetFormatByExtension(LPCTSTR fullPath, LPCTSTR baseExt /*= _T("ecm")
 
 	auto ext = path.substr(lastDot + 1);
 	// 소문자 통일
-	DWKREMINDER("ucstd:: 에 MakeStrLower 추가");
+	//DWKREMINDER("ucstd:: 에 MakeStrLower 추가");
 	ucstd::MakeStrLower(ext);
 	ucstd::MakeStrLower(base);
 

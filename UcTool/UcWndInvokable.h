@@ -570,16 +570,6 @@ inline LRESULT SendMainTaskSimple(HWND hwnd, std::function<LRESULT(LPVOID)> lamb
 	return CPostMainTaskHelper::SendMainTask(hwnd, lambda, fnc, line);
 }
 
-//inline void PostMainTaskSelfSimple(std::function<void()> lambda, LPCSTR fnc = nullptr, int line = -1)
-//{
-//    CPostMainTaskHelper::PostMainTask(GetSafeHwnd(), lambda, fnc, line);
-//}
-//
-//inline LRESULT SendMainTaskSelfSimple(std::function<LRESULT()> lambda, LPCSTR fnc = nullptr, int line = -1)
-//{
-//    return CPostMainTaskHelper::SendMainTask(GetSafeHwnd(), lambda, fnc, line);
-//}
-
 // 단순한 편의 함수들 (func, line 파라미터 없음)
 inline void PostMainTask(HWND hwnd, std::function<void(LPVOID)> lambda)
 {
@@ -590,16 +580,6 @@ inline LRESULT SendMainTask(HWND hwnd, std::function<LRESULT(LPVOID)> lambda)
 {
 	return CPostMainTaskHelper::SendMainTask(hwnd, lambda, nullptr, -1);
 }
-
-//inline void PostMainTaskSelf(std::function<void()> lambda)
-//{
-//    CPostMainTaskHelper::PostMainTask(GetSafeHwnd(), lambda, nullptr, -1);
-//}
-//
-//inline LRESULT SendMainTaskSelf(std::function<LRESULT()> lambda)
-//{
-//    return CPostMainTaskHelper::SendMainTask(GetSafeHwnd(), lambda, nullptr, -1);
-//}
 
 // this를 명시적으로 받는 버전 (일반 클래스에서 사용)
 template<typename T>
@@ -689,29 +669,32 @@ public:
 		}
 	}
 
-	// 한 번에 타이머 생성 및 설정하는 편의 함수들
-	static KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed,
-		std::function<void(LPVOID)> lmda, int maxCount = 0,
-		std::function<void(LPVOID)> lmdaFinish = nullptr, LPCSTR fnc = nullptr, int line = 0)
-	{
-		if (!pWnd || !::IsWindow(pWnd->GetSafeHwnd()))
-			return nullptr;
+	//// 한 번에 타이머 생성 및 설정하는 편의 함수들
+	//static KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed,
+	//	std::function<void(LPVOID)> lmda, int maxCount = 0,
+	//	std::function<void(LPVOID)> lmdaFinish = nullptr, LPCSTR fnc = nullptr, int line = 0)
+	//{
+	//	if (!pWnd || !::IsWindow(pWnd->GetSafeHwnd()))
+	//		return nullptr;
 
-		KLambdaTimer* pTimer = new KLambdaTimer(pWnd);
-		pTimer->SetTimerLambda(sid, elapsed, lmda, maxCount, lmdaFinish, fnc, line);
-		return pTimer;
-	}
+	//	KLambdaTimer* pTimer = new KLambdaTimer(pWnd);
+	//	pTimer->SetTimerLambda(sid, elapsed, lmda, maxCount, lmdaFinish, fnc, line);
+	//	return pTimer;
+	//}
 
-	static KLambdaTimer* SetTimerLambda(HWND hwnd, LPCSTR sid, UINT elapsed,
-		std::function<void(LPVOID)> lmda, int maxCount = 0,
-		std::function<void(LPVOID)> lmdaFinish = nullptr, LPCSTR fnc = nullptr, int line = 0)
-	{
-		if (!::IsWindow(hwnd))
-			return nullptr;
+	//static KLambdaTimer* SetTimerLambda(HWND hwnd, LPCSTR sid, UINT elapsed,
+	//	std::function<void(LPVOID)> lmda, int maxCount = 0,
+	//	std::function<void(LPVOID)> lmdaFinish = nullptr, LPCSTR fnc = nullptr, int line = 0)
+	//{
+	//	if (!::IsWindow(hwnd))
+	//		return nullptr;
 
-		CWnd* pWnd = CWnd::FromHandle(hwnd);
-		return SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish, fnc, line);
-	}
+	//	CWnd* pWnd = CWnd::FromHandle(hwnd);
+	//	return SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish, fnc, line);
+	//}
+
+
+
 };
 
 // WindowProc override에 타이머 처리 추가하는 매크로
@@ -752,48 +735,65 @@ public:
 // 편의 함수들 - 한 번에 타이머 생성 및 설정
 // ========================================
 
-// CWnd* 버전
-inline KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed,
-	std::function<void(LPVOID)> lmda, int maxCount = 0,
-	std::function<void(LPVOID)> lmdaFinish = nullptr)
-{
-	return CKLambdaTimerHelper::SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish);
-}
-
-// HWND 버전
-inline KLambdaTimer* SetTimerLambda(HWND hwnd, LPCSTR sid, UINT elapsed,
-	std::function<void(LPVOID)> lmda, int maxCount = 0,
-	std::function<void(LPVOID)> lmdaFinish = nullptr)
-{
-	return CKLambdaTimerHelper::SetTimerLambda(hwnd, sid, elapsed, lmda, maxCount, lmdaFinish);
-}
-
-// AfxGetMainWnd() 버전 (가장 편리) - 윈도우 정보를 먼저 명시
-//inline KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed, 
-//    std::function<void(LPVOID)> lmda, int maxCount = 0, 
-//    std::function<void(LPVOID)> lmdaFinish = nullptr)
+///// func, line 파라미터를 넣어주려면 CKLambdaTimerHelper::SetTimerLambda 를 직접 부른다.
+//inline KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed,
+//	std::function<void(LPVOID)> lmda, int maxCount = 0,
+//	std::function<void(LPVOID)> lmdaFinish = nullptr)
 //{
-//    return CKLambdaTimerHelper::SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish);
+//	return CKLambdaTimerHelper::SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish);
 //}
-
-// AfxGetMainWnd() 자동 지정 버전 (편의용)
-inline KLambdaTimer* SetTimerLambda(LPCSTR sid, UINT elapsed,
-	std::function<void(LPVOID)> lmda, int maxCount = 0,
-	std::function<void(LPVOID)> lmdaFinish = nullptr)
-{
-	return CKLambdaTimerHelper::SetTimerLambda(AfxGetMainWnd(), sid, elapsed, lmda, maxCount, lmdaFinish);
-}
+//
+//// HWND 버전
+//inline KLambdaTimer* SetTimerLambda(HWND hwnd, LPCSTR sid, UINT elapsed,
+//	std::function<void(LPVOID)> lmda, int maxCount = 0,
+//	std::function<void(LPVOID)> lmdaFinish = nullptr)
+//{
+//	return CKLambdaTimerHelper::SetTimerLambda(hwnd, sid, elapsed, lmda, maxCount, lmdaFinish);
+//}
+//
+//// AfxGetMainWnd() 버전 (가장 편리) - 윈도우 정보를 먼저 명시
+////inline KLambdaTimer* SetTimerLambda(CWnd* pWnd, LPCSTR sid, UINT elapsed, 
+////    std::function<void(LPVOID)> lmda, int maxCount = 0, 
+////    std::function<void(LPVOID)> lmdaFinish = nullptr)
+////{
+////    return CKLambdaTimerHelper::SetTimerLambda(pWnd, sid, elapsed, lmda, maxCount, lmdaFinish);
+////}
+//
+//// AfxGetMainWnd() 자동 지정 버전 (편의용)
+//inline KLambdaTimer* SetTimerLambda(LPCSTR sid, UINT elapsed,
+//	std::function<void(LPVOID)> lmda, int maxCount = 0,
+//	std::function<void(LPVOID)> lmdaFinish = nullptr)
+//{
+//	return CKLambdaTimerHelper::SetTimerLambda(AfxGetMainWnd(), sid, elapsed, lmda, maxCount, lmdaFinish);
+//}
+//inline void DelayAndRunOnceLambda(LPCSTR sid, UINT elapsed, function<void(LPVOID)> lmda)
+//{
+//	if (!IsTimerExists(sid))// 처음 불려 질때
+//		SetTimerLambda(sid, elapsed, lmda, 1, nullptr);
+//	else// 이미 타이머 작동중인데 또다시 불려졌을때
+//		RestartTimer(sid);
+//}
+#ifndef REMIND_PostMainTask_
+#define REMIND_PostMainTask_
+DWKREMINDER("여기 PostMainTaskSelf 관련 샘플")
+#endif
 
 #ifdef _Usage_PostMainTask_LambdaTimer
 /// 사용법: C:\Dropbox\Proj\CmnJ\UcTool\UcWndInvokable.h  UcTool은 링크
 ***********************************************************************
-1. 헤더 파일에 #include "UcWndInvokable.h" 추가 (이미 포함되어 있음)
+1. 헤더 파일에 #include "UcWndInvokable.h" 추가
+#include "UcTool/UcWndInvokable.h"
 
 2-A. WindowProc을 override하지 않은 경우:
 	class CMyDialog : public CDialog
 	{
 	public:
-		 OVERRIDE_WINDOWPROC_FOR_POSTMAINTASK(CDialog)  // 매크로 한 줄로 추가!
+		/// 이걸 해줌 으로써 WindowProc에서 WM_USER_INVOKE 메시지를 받을수 있게 됩니다. 
+		/// 1. PostMainTaskSelf([this]() { ... }); 를 이용할 수 있게 됩니다.
+		/// 
+		/// 이걸 해줌 으로써 WindowProc에서 WM_TIMER 메시지를 받을수 있게 됩니다. 
+		/// 2. SetTimerLambda(HWND...) 를 이용할 수 있게 됩니다.
+		OVERRIDE_WINDOWPROC_FOR_ALL(CDialog)  // 매크로 한 줄로 추가!
 
 		 void DoWork()
 		 {
@@ -828,48 +828,71 @@ inline KLambdaTimer* SetTimerLambda(LPCSTR sid, UINT elapsed,
 		}
 	};
 
-3. 사용 예제:
+3. 사용 예제: 사용법
 	// CWnd 계열 클래스에서 사용 (this 자동)
-	PostMainTaskSelf([this]() {
+	PostMainTaskSelf([this](auto) {
 		 SetDlgItemText(IDC_STATUS, L"작업 완료!");
 	});
 	// 일반 클래스에서 사용 (원하는 윈도우 선택)
 	PostMainTaskSelf(AfxGetMainWnd(), [this]() {
 		 // 메인 윈도우에 PostMessage
 	});
-	PostMainTaskSelf(m_pDialog, [this]() {
+	PostMainTaskSelf(m_pDialog, [this](auto) {
 		 // 특정 다이얼로그에 PostMessage
 	});
 
 	// 복잡한 람다 (디버깅 필요시)
-	PostMainTaskSelfSimple([this]() {
+	PostMainTaskSelf([this](auto) {
 		 // 복잡한 로직...
 		 SetDlgItemText(IDC_STATUS, L"작업 완료!");
 	});
 
-	// 동기 실행
-	LRESULT result = SendMainTaskSelf([this]() -> LRESULT {
+	// 동기 실행 : 리턴값이 필요한 경우
+	LRESULT result = SendMainTaskSelf([this](auto) -> LRESULT {
 		 return MessageBox(L"계속하시겠습니까?", L"확인", MB_YESNO);
 	});
 
-	// 매크로 사용도 가능하지만 디버깅이 어려움
+	/// 매크로 사용도 가능하지만 디버깅이 어려움
 	// POST_MAIN_TASK_SELF([this]() { ... });
 	// SEND_MAIN_TASK_SELF([this]() -> LRESULT { ... });
 
 최소한의 추가 코드:
 - CMainFrame에만: OVERRIDE_WINDOWPROC_FOR_ALL(CFrameWnd) 매크로 한 줄
-- 다른 모든 클래스: WindowProc override 불필요!
+- CMainFrame에 하면, 다른 모든 클래스에서 WindowProc override 할필요 없다.
 
 사용법:
-- PostMainTask: PostMainTaskSelf(AfxGetMainWnd(), [this]() { ... });
-- LambdaTimer (권장): SetTimerLambda(AfxGetMainWnd(), "test", 1000, [this](auto) { ... });
-- LambdaTimer (편의): SetTimerLambda("test", 1000, [this](auto) { ... });
-- LambdaTimer (기존): KLambdaTimer timer(AfxGetMainWnd()); timer.SetTimerLambda("test", 1000, [this](auto) { ... });
-- 특정 윈도우: PostMainTaskSelf(m_pDialog, [this]() { ... });
-- HWND 직접: PostMainTask(hwnd, [this]() { ... });
+	///	PostMainTask: 
+	PostMainTaskSelf(AfxGetMainWnd(), [this]() { ... });
+	/// LambdaTimer (권장): 타이머처리 윈도우는 MainFrame에서 한다.
+
+#ifdef _TimerSamples_ //dwk: 2026-04-20 17:38 
+	class KLambdaTimer;// foward declaration
+
+	SHP<KLambdaTimer> _timer;//멤버 pointer 선언
+
+	_timer = make_shared<KLambdaTimer>(this);//이건 윈도우 초기 단계에서 OnCreate, OnInitDialog 같은데서 만들어 진다고 가정.
+
+	_timer->SetTimerLambda("_progr", 250, [&](auto) {
+		// do something repeatedly every 250ms
+		});
+
+	_timer->DelayAndRunOnce(__FUNCTION__, 10_sec,
+		[this, sFileOnly, sAction, sExt](auto) {
+			SomeAutoCommitAtBuildDelay(sFileOnly, sAction, sExt);
+		});
+#endif // _TimerSamples_
+
+	//SetTimerLambda(AfxGetMainWnd(), "test", 1000, [this](auto) { ... });
+	///// LambdaTimer (편의): 
+	//SetTimerLambda("test", 1000, [this](auto) { ... });
+	///// LambdaTimer (기존): KLambdaTimer timer(AfxGetMainWnd()); timer.SetTimerLambda("test", 1000, [this](auto) { ... });
+	///// 특정 윈도우: 
+	//	PostMainTaskSelf(m_pDialog, [this](auto) { ... });
+	///// HWND 직접: 
+	//	PostMainTask(hwnd, [this](auto) { ... });
 
 장점:
-- CFormInvokable, CDlgInvokable 등 특별한 클래스 상속 불필요
+- CFormInvokable, CDlgInvokable 등 특별한 클래스 상속 불필요 :  [[deprecated]]
 - 메인 윈도우에만 한 번만 설정하면 어디서든 사용 가능
 - PostMainTask와 LambdaTimer 모두 지원
 - 원하는 윈도우를 선택해서 PostMessage 가능

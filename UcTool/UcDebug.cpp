@@ -7,13 +7,14 @@
 #include "UcTimeTools.h"
 #include "UcThreadTool.h"
 
+#include "UcTool.h"
 #include "UcDebug.h"
 //#pragma message(FILINDWK("주의: 반드시 DwkData::g_mapEnumStr 인스턴스를 넣어야 한다."))
 //#pragma message("std::map<std::type_index, std::map<int, std::wstring>> DwkData::g_mapEnumStr;")
 
 // C++14 호환성을 위한 EXTERN_STATIC 변수 정의
 
-DWKBLD("Put GetMapStack() to EXE or DLL Project.")
+DWKREMINDER("Put GetMapStack() to EXE or DLL Project.")
 
 /// DLL 로  UcTool.dll로 된 경우, GetMapStatck() 함수가 export 가 자동으로 된다.
 /// UcTool이 static lib일때는, 어디선가 GetMapStack() 함수가 정의되어야 한다. (예: App InitInstance가 있는 파일에 주로)
@@ -21,16 +22,111 @@ DWKBLD("Put GetMapStack() to EXE or DLL Project.")
 _PUT_THIS_TO_DLL_OR_EXE_
 #endif // UCTOOL_EXPORTS
 
-#if CPP_BEFORE_17
-//#pragma message(FILINDWK("C++14 is supported. (Not C++17)"))
+#if CPP17_OR_LATER
+/// static 멤버 변수는 클래스 정의에서 선언만 하고, cpp 파일에서 정의해야 합니다. (초기화 포함)
+//std::shared_ptr<KTrace> KTrace::instance_;
+int KTrace::wHd_ = 100;
 
-//#pragma message(FILINDWK("std::mutex mutexHandler_; defined."))
+
+//UCTOOLDYNAMIC
+//std::shared_ptr<KTrace> KTrace_Instance(){
+//	return GSingleton<KTrace>::GetInstance();
+//}
+
+
+//GlobalInstance(KTrace);
+
+std::shared_ptr<KTrace> KTrace::Instance()
+{
+	//return GlobalInstance(KTrace);
+	return GSingleton<KTrace>::GetInstance();
+	// 
+	//std::call_once(initFlag_, []() {//프로세스 전역이 아니라 “모듈 단위”
+	//	instance_ = std::make_shared<KTrace>();
+	//	});
+	//return instance_;
+}
+//std::once_flag KTrace::initFlag_;
+
+/// extern 변수는 헤더에 선언만 하고, cpp에서 정의해야 합니다. (초기화 포함)
 std::mutex mutexHandler_; //14
 
+/// extern 변수 초기화
+std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_ = {
+#ifdef _DEBUG_tst
+	{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
+		auto ff = format.Mid(1);
+		auto value1 = std_any_cast<int>(operand);
+		if (ff.GetLength() >= 1)
+			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
+		wss << value1;
+	}},
+#else
+	{ typeid(int), [](VAR_PARAMS) {auto ff = format.Mid(1); int value1 = std_any_cast<int>(operand); if (ff.GetLength() >= 1) wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' '); wss << value1;;	} },
+#endif // _DEBUG
+	{	typeid(short int), [](VAR_PARAMS) {PrimierVar_Arg(short int         , wss, operand, format);	}},
+	{	typeid(short unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(short unsigned int, wss, operand, format);	}},
+	{	typeid(unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(unsigned int      , wss, operand, format);	}},
+	{	typeid(long), [](VAR_PARAMS) {PrimierVar_Arg(long              , wss, operand, format);	}},
+	{	typeid(unsigned long), [](VAR_PARAMS) {PrimierVar_Arg(unsigned long     , wss, operand, format);	}},
+	{	typeid(__int64), [](VAR_PARAMS) {PrimierVar_Arg(__int64           , wss, operand, format);	}},
+	{	typeid(unsigned __int64), [](VAR_PARAMS) {PrimierVar_Arg(unsigned __int64  , wss, operand, format);	}},
+	{	typeid(float), [](VAR_PARAMS) {PrimierRealArg(float             , wss, operand, format);	}},//format = L"%6.2v"		   
+	{	typeid(double), [](VAR_PARAMS) {PrimierRealArg(double            , wss, operand, format);	}},
+	{	typeid(std::wstring), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring&>(operand); }},
+	{	typeid(std::string), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string&>(operand).c_str()).GetString(); }},
+	/// nullterminated 라고 보장한 경우 data()를 쑬수 있다.
+	{	typeid(std::wstring_view), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring_view&>(operand).data(); }},
+	{	typeid(std::string_view), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string_view&>(operand).data()).GetString(); }},
+	{	typeid(std::wstringstream), [](VAR_PARAMS) { ASSERT(0 == "DwktoAny error"); wss << std_any_cast<const std::wstringstream&>(operand).str(); }},
+	{	typeid(std::stringstream), [](VAR_PARAMS) { ASSERT(0 == "DwktoAny error"); wss << CStringW(std_any_cast<const std::stringstream&>(operand).str().c_str()).GetString(); }},
+	{	typeid(CStringW), [](VAR_PARAMS) { wss << std_any_cast<const CStringW&>(operand).GetString(); }},
+	/// &참조를 쓸때는 반드시 const를 붙여야, 호출한 곳에서 const가 붙었더라도 여기서 붙일수 있다.
+	{	typeid(CStringA), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const CStringA&>(operand)).GetString(); }},
+	{	typeid(const wchar_t*), [](VAR_PARAMS) {
+		wss << std_any_cast<const wchar_t*>(operand); //NULL인 경우
+	}},
+	{	typeid(wchar_t*), [](VAR_PARAMS) { wss << (LPCWSTR)std_any_cast<wchar_t*>(operand); }},/// const 붙이고 cast하면 안된다. 
+	{	typeid(const char*), [](VAR_PARAMS) { wss << CStringW((LPCSTR)std_any_cast<const char*>(operand)).GetString(); }},
+	{	typeid(char*), [](VAR_PARAMS) { wss << CStringW((LPCSTR)std_any_cast<char*>(operand)).GetString(); }},
+	{	typeid(bool), [](VAR_PARAMS) { wss << (std_any_cast<bool>(operand) ? L"true" : L"false"); }},//wss << (b ? L"1" : L"0");
+	{	typeid(std::nullptr_t), [](VAR_PARAMS) { wss << L"(null)"; }},
+	{	typeid(void*), [](VAR_PARAMS) { void* ptr = std_any_cast<void*>(operand);
+		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
+	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
+	{	typeid(std::tuple<LPCSTR, int>), [](VAR_PARAMS) {// 예전에 enum 사용자 문자열 정의때 쓰던 tuple타입을 임시로 생성 된다.
+		auto [pType, iValue] = std_any_cast<std::tuple<LPCSTR, int>>(operand);
+		//auto tuple_val = std_any_cast<std::tuple<LPCSTR, int>>(operand);
+		//LPCSTR pType = std::get<0>(tuple_val);
+		//int iValue = std::get<1>(tuple_val);
+		std::wstring value;
+		auto it = DWK_mapEnum.find(pType);// enum type인 경우만 사용
+		if (it != DWK_mapEnum.end())
+			value = it->second(iValue);
+		else
+		{// "enum IcEdSplinEditDragPointJig::PointType", 0
+			value = DwkDefaultEnum(pType, (int)iValue);//value = L"enum `protected: virtual void __cdecl CUcView::OnInitialUpdate(void) __ptr64'::`2'::ENum(0)"
+			size_t pos = value.rfind(':');
+			if (pos != std::wstring::npos)
+				value = value.substr(pos + 1);//value = L"ENum(0)"   L"<unnamed-enum-eTest1>(0)"
+		}
+		wss << value;//value = L"@@IcEdSplinEditDragPointJig::kFitPoint(0)"
+	}},
+	{	typeid(HANDLE), [](VAR_PARAMS) {
+		auto ptr = std_any_cast<HANDLE>(operand);
+		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
+	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
+	{	typeid(HKEY), [](VAR_PARAMS) {
+		auto ptr = std_any_cast<HKEY>(operand);
+		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
+	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
+};
+
+#else//CPP_BEFORE_17
+
 // KTrace 클래스의 INLINE_STATIC 멤버들 정의
-std::shared_ptr<KTrace> KTrace::instance_;
-std::once_flag KTrace::initFlag_;
-int KTrace::wHd_ = 100;
+
+
 // DbgCString 클래스의 INLINE_STATIC 멤버들 정의
 std::string DbgCString::to_findW = "class ATL::CStringT<wchar_t,class StrTraitMFC<wchar_t,class ATL::ChTraitsCRT<wchar_t> > >";
 std::string DbgCString::to_replaceW = "CStringW";
@@ -69,171 +165,6 @@ std::shared_ptr<CKTrace> CKTrace::pstd_cout;
 std::map<std::string, std::function<std::wstring(int)>> DWK_mapEnum = {};
 
 
-
-// UcDebug.h의 EXTERN_STATIC 변수들
-std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_ = {
-#ifdef _DEBUG_tst
-	{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-#else
-	{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-#endif // _DEBUG
-	{	typeid(short int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<short int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(short unsigned int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<short unsigned int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(unsigned int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<unsigned int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(long), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<long>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(unsigned long), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<unsigned long>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(__int64), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<__int64>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(unsigned __int64), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<unsigned __int64>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-	{	typeid(float), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << std::setprecision(pr + 1);
-		wss << std_any_cast<float>(operand);
-	}},
-	{	typeid(double), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << std::setprecision(pr + 1);
-		wss << std_any_cast<double>(operand);
-	}},
-	{	typeid(std::wstring), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << std_any_cast<const std::wstring&>(operand);
-	}},
-	{	typeid(std::string), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << CStringW(std_any_cast<const std::string&>(operand).c_str()).GetString();
-	}},
-	//{	typeid(std::wstring_view), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) { 
-	//	wss << std_any_cast<const std::wstring_view&>(operand).data(); 
-	//}},
-	//{	typeid(std::string_view), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) { 
-	//	wss << CStringW(std_any_cast<const std::string_view&>(operand).data()).GetString(); 
-	//}},
-
-	{	typeid(std::wstringstream*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-	 ASSERT(0 == "DwktoAny error");
-	 wss << CStringW(std_any_cast<std::wstringstream*>(operand)->str().c_str()).GetString();
-	}},
-	//{	typeid(std::wstringstream), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-	//	ASSERT(0 == "DwktoAny error"); 
-	//	wss << std_any_cast<const std::wstringstream&>(operand).str(); 
-	//}},
-	{	typeid(std::stringstream*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-	 ASSERT(0 == "DwktoAny error");
-	 wss << CStringW(std_any_cast<std::stringstream*>(operand)->str().c_str()).GetString();
-	}},
-	//{	typeid(std::stringstream), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) { 
-	//	ASSERT(0 == "DwktoAny error"); 
-	//	wss << CStringW(std_any_cast<const std::stringstream&>(operand).str().c_str()).GetString(); 
-	//}},
-	{	typeid(CStringW), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << std_any_cast<const CStringW&>(operand).GetString();
-	}},
-	{	typeid(CStringA), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << CStringW(std_any_cast<const CStringA&>(operand)).GetString();
-	}},
-	{	typeid(const wchar_t*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << std_any_cast<const wchar_t*>(operand);
-	}},
-	{	typeid(wchar_t*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << (LPCWSTR)std_any_cast<wchar_t*>(operand);
-	}},
-	{	typeid(const char*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << CStringW((LPCSTR)std_any_cast<const char*>(operand)).GetString();
-	}},
-	{	typeid(char*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << CStringW((LPCSTR)std_any_cast<char*>(operand)).GetString();
-	}},
-	{	typeid(bool), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << (std_any_cast<bool>(operand) ? L"true" : L"false");
-	}},
-	{	typeid(std::nullptr_t), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		wss << L"(null)";
-	}},
-	{	typeid(void*), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		void* ptr = std_any_cast<void*>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},
-	{	typeid(std::tuple<LPCSTR, int>), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-#if CPP17_OR_LATER
-		auto [pType, iValue] = std_any_cast<std::tuple<LPCSTR, int>>(operand);
-#else
-		auto tuple_val = std_any_cast<std::tuple<LPCSTR, int>>(operand);
-		LPCSTR pType = std::get<0>(tuple_val);
-		int iValue = std::get<1>(tuple_val);
-#endif
-		std::wstring value;
-		auto it = DWK_mapEnum.find(pType);
-		if (it != DWK_mapEnum.end())
-			value = it->second(iValue);
-		else
-		{
-			value = DwkDefaultEnum(pType, (int)iValue);
-			size_t pos = value.rfind(':');
-			if (pos != std::wstring::npos)
-				value = value.substr(pos + 1);
-		}
-		wss << value;
-	}},
-	{	typeid(HANDLE), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ptr = std_any_cast<HANDLE>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},
-	{	typeid(HKEY), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ptr = std_any_cast<HKEY>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},
-};
-
 #endif //_DWKTRACE_TRUE
 
 //#endif//_DWKTRACE_TRUE
@@ -258,19 +189,6 @@ std::wstring DWK__anyToStringEx(const std_any& operand, const CStringW& format)
 #pragma endregion	align]
 
 #pragma region	[type mapping
-#define VAR_PARAMS std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr
-	// static 람다 초기화에서는 캡쳐를 한번만 하니, 파라미터로 넘겨 줘야 한다. 올드: [&wss, &format] -> []
-#define PrimierVar_Arg(FTYPE, wss, operand, format) \
-	auto ff = format.Mid(1);\
-	auto value1 = std_any_cast<FTYPE>(operand);\
-	if (ff.GetLength() >= 1)\
-		wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');\
-	wss << value1;
-
-#define PrimierRealArg(FTYPE, wss, operand, format) \
-	wss << std::setprecision(pr+1); \
-	wss << std_any_cast<FTYPE>(operand);
-//format = L"%6.2v"
 	static std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> handlers_ = {
 #ifdef _DEBUG_tst
 		{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
@@ -281,31 +199,30 @@ std::wstring DWK__anyToStringEx(const std_any& operand, const CStringW& format)
 			wss << value1;
 		}},
 #else
-		{	typeid(int), [](VAR_PARAMS) {PrimierVar_Arg(int              , wss, operand, format);	}},
 #endif // _DEBUG
-		{	typeid(short int), [](VAR_PARAMS) {PrimierVar_Arg(short int         , wss, operand, format);	}},
-		{	typeid(short unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(short unsigned int, wss, operand, format);	}},
-		{	typeid(unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(unsigned int      , wss, operand, format);	}},
-		{	typeid(long), [](VAR_PARAMS) {PrimierVar_Arg(long              , wss, operand, format);	}},
-		{	typeid(unsigned long), [](VAR_PARAMS) {PrimierVar_Arg(unsigned long     , wss, operand, format);	}},
-		{	typeid(__int64), [](VAR_PARAMS) {PrimierVar_Arg(__int64           , wss, operand, format);	}},
-		{	typeid(unsigned __int64), [](VAR_PARAMS) {PrimierVar_Arg(unsigned __int64  , wss, operand, format);	}},
-		{	typeid(float), [](VAR_PARAMS) {PrimierRealArg(float             , wss, operand, format);	}},//format = L"%6.2v"		   
-		{	typeid(double), [](VAR_PARAMS) {PrimierRealArg(double            , wss, operand, format);	}},
-		{	typeid(std::wstring), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring&>(operand); }},
-		{	typeid(std::string), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string&>(operand).c_str()).GetString(); }},
-		{	typeid(std::wstring_view), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring_view&>(operand).data(); }},
+		
+		{ typeid(int    ), [] (VAR_PARAMS) { PrimierVar_Arg(int    , wss, operand, format); }},
+		{ typeid(INT16  ), [] (VAR_PARAMS) { PrimierVar_Arg(INT16  , wss, operand, format); }},
+		{ typeid(UINT16 ), [] (VAR_PARAMS) { PrimierVar_Arg(UINT16 , wss, operand, format); }},
+		{ typeid(UINT32 ), [] (VAR_PARAMS) { PrimierVar_Arg(UINT32 , wss, operand, format); }},
+		{ typeid(long   ), [] (VAR_PARAMS) { PrimierVar_Arg(long   , wss, operand, format); }},
+		{ typeid(ULONG  ), [] (VAR_PARAMS) { PrimierVar_Arg(ULONG  , wss, operand, format); }},
+		{ typeid(__int64), [] (VAR_PARAMS) { PrimierVar_Arg(__int64, wss, operand, format); }},
+		{ typeid(UINT64 ), [] (VAR_PARAMS) { PrimierVar_Arg(UINT64 , wss, operand, format); }},
+		{ typeid(float  ), [] (VAR_PARAMS) { PrimierRealArg(float  , wss, operand, format); }}, //format = L"%6.2v"
+		{ typeid(double ), [] (VAR_PARAMS) { PrimierRealArg(double , wss, operand, format); }},
+		{ typeid(std::wstring      ), [] (VAR_PARAMS) { wss <<          std_any_cast<const std::wstring       &>(operand);}},
+		{ typeid(std::wstring_view ), [] (VAR_PARAMS) { wss <<          std_any_cast<const std::wstring_view  &>(operand).data();}},
+		{ typeid(std::wstringstream), [] (VAR_PARAMS) { wss <<          std_any_cast<const std::wstringstream &>(operand).str();}},
+		{ typeid(CStringW          ), [] (VAR_PARAMS) { wss <<          std_any_cast<const CStringW           &>(operand).GetString();}},
+		{ typeid(std::string       ), [] (VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string        &>(operand).c_str()).GetString();}},
+		{ typeid(std::string_view  ), [] (VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string_view   &>(operand).data()).GetString();}},
+		{ typeid(std::stringstream ), [] (VAR_PARAMS) { wss << CStringW(std_any_cast<const std::stringstream  &>(operand).str().c_str()).GetString();}},
+		{ typeid(CStringA          ), [] (VAR_PARAMS) { wss << CStringW(std_any_cast<const CStringA           &>(operand)).GetString();}},
 		/// nullterminated 라고 보장한 경우 data()를 쑬수 있다.
-		{	typeid(std::string_view), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string_view&>(operand).data()).GetString(); }},
-		{	typeid(std::wstringstream), [](VAR_PARAMS) { wss << std_any_cast<const std::wstringstream&>(operand).str(); }},
-		{	typeid(std::stringstream), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::stringstream&>(operand).str().c_str()).GetString(); }},
-		{	typeid(CStringW), [](VAR_PARAMS) { wss << std_any_cast<const CStringW&>(operand).GetString(); }},
 		/// &참조를 쓸때는 반드시 const를 붙여야, 호출한 곳에서 const가 붙었더라도 여기서 붙일수 있다.
-		{	typeid(CStringA), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const CStringA&>(operand)).GetString(); }},
-#define NULLOPERAND(TT) (operand.has_value() ? std_any_cast<TT>(operand) : L"(null)")
-#define NULLOPERAND_(TT) (operand.has_value() ? std_any_cast<TT>(operand) : L"")
-		//#define NULLOPERANDA(TT) (operand ? std_any_cast<TT>(operand) : L"(null)")
-		//#define NULLOPERANDA_(TT) (operand ? std_any_cast<TT>(operand) : L"")
+//#define NULLOPERAND(TT) (operand.has_value() ? std_any_cast<TT>(operand) : L"(null)")
+//#define NULLOPERAND_(TT) (operand.has_value() ? std_any_cast<TT>(operand) : L"")
 		{	typeid(const wchar_t*), [](VAR_PARAMS) {
 			ASSERT(operand.has_value());//널이어도 true
 			auto pstr = std_any_cast<const wchar_t*>(operand);
@@ -313,27 +230,19 @@ std::wstring DWK__anyToStringEx(const std_any& operand, const CStringW& format)
 				wss << pstr;// std_any_cast<const wchar_t*>(operand);
 			else
 				wss << L"(null)";
-			//NULLOPERAND(const wchar_t*);
-			//(operand.has_value() ? std_any_cast<const wchar_t*>(operand) : L"(null)");
 	}},
 {	typeid(wchar_t*), [](VAR_PARAMS) { //wss <<
-			//(LPCWSTR)NULLOPERAND(wchar_t*); 
 				auto pstr = std_any_cast<wchar_t*>(operand);
 				if (pstr)
 					wss << (LPCWSTR)pstr;
 				else
 					wss << L"(null)";
-				//(operand.has_value() ? (LPCWSTR)std_any_cast<wchar_t*>(operand) : L"(null)");
-					//(LPCWSTR)std_any_cast<wchar_t*>(operand);
-			//(LPCWSTR)(operand.has_value() ? (LPCWSTR)std_any_cast<wchar_t*>(operand) : L"(null)");
 			}},/// const 붙이고 cast하면 안된다. 
 			{	typeid(const char*), [](VAR_PARAMS) { wss <<
 				CStringW((LPCSTR)std_any_cast<const char*>(operand)).GetString();
-	//CStringW((LPCSTR)NULLOPERAND(const char*));
 }},
 {	typeid(char*), [](VAR_PARAMS) { wss <<
 	CStringW((LPCSTR)std_any_cast<char*>(operand)).GetString();
-	//CStringW((LPCSTR)NULLOPERAND(char*));
 }},
 {	typeid(bool), [](VAR_PARAMS) { wss << (std_any_cast<bool>(operand) ? L"true" : L"false"); }},//wss << (b ? L"1" : L"0");
 {	typeid(std::nullptr_t), [](VAR_PARAMS) { wss << L"(nullptr)"; }},

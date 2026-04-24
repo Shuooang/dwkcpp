@@ -29,6 +29,7 @@ UcHttpSvr::~UcHttpSvr(void)
 
 int  UcHttpSvr::InitSvr(LPCWSTR sUri)
 {
+	DWKFUNC;
 	BACKGROUND(1);
 	CSingleLock lk(&_mtx);
 
@@ -44,16 +45,21 @@ int  UcHttpSvr::InitSvr(LPCWSTR sUri)
 		retCode = HttpInitialize(ver1, HTTP_INITIALIZE_SERVER, NULL);
 		if (retCode != NO_ERROR)
 		{
-			TRACE(_T("HttpInitialize failed with %u \n"), retCode);
-			return retCode;
+			throw_str(_T("HttpInitialize failed with %u \n"), retCode);
+			//return retCode;
 		}
+		KDefer d_init([]() {
+			ULONG ru = HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+			});
 		retCode = HttpCreateHttpHandle(&hReqQueue, 0); // Req Queue Reserved
 		if (retCode != NO_ERROR)
 		{
-			TRACE(_T("HttpCreateHttpHandle failed with %u \n"), retCode);
-			throw retCode;
+			throw_str(_T("HttpCreateHttpHandle failed with %u \n"), retCode);
+			//throw retCode;
 		}
-
+		KDefer d_create([hReqQueue, sUri]() { 
+			HttpRemoveUrl(hReqQueue, sUri);
+			});
 		//   "http://www.adatum.com:80/vroot/"
 		//   "https://adatum.com:443/secure/database/"
 		//   "http://+:80/vroot/"
@@ -65,15 +71,15 @@ int  UcHttpSvr::InitSvr(LPCWSTR sUri)
 		}
 		else if (retCode == ERROR_ACCESS_DENIED)//5L
 		{	// 이미 소켓이 사용 되는 경우다. 관리자 모드로 VS를 실행 해보라.
-			TRACE(_T("ERROR_ACCESS_DENIED %u\r\n"), retCode);
-			AfxMessageBox(_T("ERROR_ACCESS_DENIED. Excute with admin access right."));
-			throw retCode;
+			throw_str(_T("ERROR_ACCESS_DENIED %u\r\n"), retCode);
+			//AfxMessageBox(_T("ERROR_ACCESS_DENIED. Excute with admin access right."));
+			//throw retCode;
 		}
 		else
 		{	// 이미 소켓이 사용 되는 경우다. 관리자 모드로 VS를 실행 해보라.
-			TRACE(_T("HttpAddUrl failed with %u\r\n"), retCode);
-			AfxMessageBox(_T("HttpAddUrl Error!."));
-			throw retCode;
+			throw_str(_T("HttpAddUrl failed with %u\r\n"), retCode);
+			//AfxMessageBox(_T("HttpAddUrl Error!."));
+			//throw retCode;
 		}
 
 		ULONG result = -1;
@@ -92,8 +98,8 @@ int  UcHttpSvr::InitSvr(LPCWSTR sUri)
 	catch (...) {}
 
 	//  Cleanup the HTTP Server API
-	HttpRemoveUrl(hReqQueue, sUri);// Req Queue// Fully qualified URL
-	ULONG ru = HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
+	//HttpRemoveUrl(hReqQueue, sUri);// Req Queue// Fully qualified URL
+	//ULONG ru = HttpTerminate(HTTP_INITIALIZE_SERVER, NULL);
 
 	return retCode;
 }

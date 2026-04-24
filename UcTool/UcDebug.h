@@ -93,7 +93,9 @@ inline void DWK__parseFormat(const CStringW& format, int& width, int& precision)
 }
 
 #pragma region	type mapping[
+
 #define VAR_PARAMS std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr
+
 // static 람다 초기화에서는 캡쳐를 한번만 하니, 파라미터로 넘겨 줘야 한다. 올드: [&wss, &format] -> []
 #define PrimierVar_Arg(FTYPE, wss, operand, format) \
 	auto ff = format.Mid(1);\
@@ -102,86 +104,15 @@ inline void DWK__parseFormat(const CStringW& format, int& width, int& precision)
 		wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');\
 	wss << value1;
 
-//<< std::fixed
 #define PrimierRealArg(FTYPE, wss, operand, format) \
 	wss << std::setprecision(pr+1); \
 	wss << std_any_cast<FTYPE>(operand);
-//format = L"%6.2v"
-EXTERN_STATIC std::mutex mutexHandler_;
-#if CPP_BEFORE_17
-EXTERN_STATIC std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_;
-//#pragma message(FILINDWK("EXTERN_STATIC mutexHandler_ declared."))
-#else
-EXTERN_STATIC std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_ = {
-#ifdef _DEBUG_tst
-	{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
-		auto ff = format.Mid(1);
-		auto value1 = std_any_cast<int>(operand);
-		if (ff.GetLength() >= 1)
-			wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' ');
-		wss << value1;
-	}},
-#else
-	{ typeid(int), [](VAR_PARAMS) {auto ff = format.Mid(1); int value1 = std_any_cast<int>(operand); if (ff.GetLength() >= 1) wss << std::setfill(ff.Left(1) == L"0" ? L'0' : L' '); wss << value1;;	} },
-#endif // _DEBUG
-	{	typeid(short int), [](VAR_PARAMS) {PrimierVar_Arg(short int         , wss, operand, format);	}},
-	{	typeid(short unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(short unsigned int, wss, operand, format);	}},
-	{	typeid(unsigned int), [](VAR_PARAMS) {PrimierVar_Arg(unsigned int      , wss, operand, format);	}},
-	{	typeid(long), [](VAR_PARAMS) {PrimierVar_Arg(long              , wss, operand, format);	}},
-	{	typeid(unsigned long), [](VAR_PARAMS) {PrimierVar_Arg(unsigned long     , wss, operand, format);	}},
-	{	typeid(__int64), [](VAR_PARAMS) {PrimierVar_Arg(__int64           , wss, operand, format);	}},
-	{	typeid(unsigned __int64), [](VAR_PARAMS) {PrimierVar_Arg(unsigned __int64  , wss, operand, format);	}},
-	{	typeid(float), [](VAR_PARAMS) {PrimierRealArg(float             , wss, operand, format);	}},//format = L"%6.2v"		   
-	{	typeid(double), [](VAR_PARAMS) {PrimierRealArg(double            , wss, operand, format);	}},
-	{	typeid(std::wstring), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring&>(operand); }},
-	{	typeid(std::string), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string&>(operand).c_str()).GetString(); }},
-	/// nullterminated 라고 보장한 경우 data()를 쑬수 있다.
-	{	typeid(std::wstring_view), [](VAR_PARAMS) { wss << std_any_cast<const std::wstring_view&>(operand).data(); }},
-	{	typeid(std::string_view), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const std::string_view&>(operand).data()).GetString(); }},
-	{	typeid(std::wstringstream), [](VAR_PARAMS) { ASSERT(0 == "DwktoAny error"); wss << std_any_cast<const std::wstringstream&>(operand).str(); }},
-	{	typeid(std::stringstream), [](VAR_PARAMS) { ASSERT(0 == "DwktoAny error"); wss << CStringW(std_any_cast<const std::stringstream&>(operand).str().c_str()).GetString(); }},
-	{	typeid(CStringW), [](VAR_PARAMS) { wss << std_any_cast<const CStringW&>(operand).GetString(); }},
-	/// &참조를 쓸때는 반드시 const를 붙여야, 호출한 곳에서 const가 붙었더라도 여기서 붙일수 있다.
-	{	typeid(CStringA), [](VAR_PARAMS) { wss << CStringW(std_any_cast<const CStringA&>(operand)).GetString(); }},
-	{	typeid(const wchar_t*), [](VAR_PARAMS) {
-		wss << std_any_cast<const wchar_t*>(operand); //NULL인 경우
-	}},
-	{	typeid(wchar_t*), [](VAR_PARAMS) { wss << (LPCWSTR)std_any_cast<wchar_t*>(operand); }},/// const 붙이고 cast하면 안된다. 
-	{	typeid(const char*), [](VAR_PARAMS) { wss << CStringW((LPCSTR)std_any_cast<const char*>(operand)).GetString(); }},
-	{	typeid(char*), [](VAR_PARAMS) { wss << CStringW((LPCSTR)std_any_cast<char*>(operand)).GetString(); }},
-	{	typeid(bool), [](VAR_PARAMS) { wss << (std_any_cast<bool>(operand) ? L"true" : L"false"); }},//wss << (b ? L"1" : L"0");
-	{	typeid(std::nullptr_t), [](VAR_PARAMS) { wss << L"(null)"; }},
-	{	typeid(void*), [](VAR_PARAMS) { void* ptr = std_any_cast<void*>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
-	{	typeid(std::tuple<LPCSTR, int>), [](VAR_PARAMS) {// 예전에 enum 사용자 문자열 정의때 쓰던 tuple타입을 임시로 생성 된다.
-		auto [pType, iValue] = std_any_cast<std::tuple<LPCSTR, int>>(operand);
-		//auto tuple_val = std_any_cast<std::tuple<LPCSTR, int>>(operand);
-		//LPCSTR pType = std::get<0>(tuple_val);
-		//int iValue = std::get<1>(tuple_val);
-		std::wstring value;
-		auto it = DWK_mapEnum.find(pType);// enum type인 경우만 사용
-		if (it != DWK_mapEnum.end())
-			value = it->second(iValue);
-		else
-		{// "enum IcEdSplinEditDragPointJig::PointType", 0
-			value = DwkDefaultEnum(pType, (int)iValue);//value = L"enum `protected: virtual void __cdecl CUcView::OnInitialUpdate(void) __ptr64'::`2'::ENum(0)"
-			size_t pos = value.rfind(':');
-			if (pos != std::wstring::npos)
-				value = value.substr(pos + 1);//value = L"ENum(0)"   L"<unnamed-enum-eTest1>(0)"
-		}
-		wss << value;//value = L"@@IcEdSplinEditDragPointJig::kFitPoint(0)"
-	}},
-	{	typeid(HANDLE), [](VAR_PARAMS) {
-		auto ptr = std_any_cast<HANDLE>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
-	{	typeid(HKEY), [](VAR_PARAMS) {
-		auto ptr = std_any_cast<HKEY>(operand);
-		wss << L"0x" << std::hex << std::setw(sizeof(ptr) * 2) << std::setfill(L'0') << (uintptr_t)ptr;
-	}},//0x00001234//wss << reinterpret_cast<int64_t>(ptr);
-};
-#endif // CPP_BEFORE_17
+
+
+UCTOOLDYNAMIC extern std::mutex mutexHandler_;
+
+UCTOOLDYNAMIC extern std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_;
+
 #pragma endregion	type mapping]
 
 
@@ -623,23 +554,21 @@ UCTOOLDYNAMIC std::shared_ptr<std::map<DWORD, std::stack<LPCWSTR>>> GetMapStackF
 
 /// static global 변수들은 초기화 순서에 따라 오류가 날수 있으니
 /// static 전용 객체 하나로 합친다.
-class KTrace
+class UCTOOLDYNAMIC KTrace
 {
 public:
-	//static inline은 c++17부터 가능
-	INLINE_STATIC std::shared_ptr<KTrace> instance_;
-	INLINE_STATIC std::once_flag initFlag_;
-public:
-	/// GSingleton<DwkThreadName>::GetInstance() 을 쓰려면 UcTool.h를 include해야 해서, 단독 singlton 을 쓴다.KTrace 마찬가지
-	static std::shared_ptr<KTrace> Instance() {
-		std::call_once(initFlag_, []() {//[this] 비정적인 경우만 this 캡쳐
-			instance_ = std::make_shared<KTrace>();
-			});
-		return instance_;
-	}
-	INLINE_STATIC int wHd_;//100
-	static void setWidth(int whd) { wHd_ = whd; }
+	//DLL에서 static 멤버변수를 전체 공유 하려면, 레거시 방식으로 cpp에서 정의 해야 한다.(inline static 은 안된다.)
+	//static std::shared_ptr<KTrace> instance_;
+	//static std::once_flag initFlag_;//std::call_once에서 사용
 
+	static int wHd_;//dwk: 2025-08-07 17:11  함수 덤프할 때 함수명 출력 폭. 0 이면 폭 없이 출력 한다. 20 정도면 적당하다. 너무 크면 오히려 가독성이 떨어진다.
+public:
+	/// GSingleton<KTrace>::GetInstance() 을 쓰려면 UcTool.h를 include해야 해서, 단독 singlton 을 쓴다.KTrace 마찬가지
+	
+	//static 함수는 인라인으로 하면 모듈만 중복될 뿐 작동에는 문제 없다. 변수만 단일 하게 하면 된다.
+	static std::shared_ptr<KTrace> Instance();
+	static void setWidth(int whd) { wHd_ = whd; }
+	 
 	std::mutex             _csMapStack;
 	// 스레드별로 스택 깊이를 매핑 해 둔다. 스레드별로 커졌다 작아졌다 한다.
 	/// GetMapStack()으로 대체
@@ -691,7 +620,7 @@ public:
 /// <summary>
 /// thread에 따라 스택 레벨과 함수명을 증/감 시키는 장치
 /// </summary>
-class KStackDump
+class UCTOOLDYNAMIC KStackDump
 {
 public:
 	KStackDump(LPCWSTR pFunc = nullptr)
@@ -1462,63 +1391,24 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 	//	};
 	bool bOutput = true;/// bFG;//debug output 창 : initinstance 스레드면 show
 	if (!bFG) {//백그라운드 경우만 체크
-		bOutput = IsShowThread(idThrd);
-		//auto itf = s_setFilterShowID.find(idThrd);//보이는 필터에 thread ID 검색
-		//if (itf != s_setFilterShowID.end())
-		//	bOutput = true;//보이는 필터에 thread ID 있슴
-		//else 
-		if (bOutput)/// 굳이 숨길 것만 숨겨: 너무 자주 뜨는거
-		{
-			//auto itr = DwkThreadName::Instance().GetMap().find(idThrd);
-			//if (itr != DwkThreadName::Instance().GetMap().end()) {
-			//	auto itf = s_setFilterHide.find(itr->second);//함수 이름 가져 와서 그걸로 hide 있나 검색?
-			//	if (itf != s_setFilterHide.end())
-			//		bOutput = false;
-			//}
-			auto itf = DwkOutputFilter::s_setFilterHide.find(pFunc);//함수 이름 가져 와서 그걸로 hide 있나 검색?
-			if (itf != DwkOutputFilter::s_setFilterHide.end())
-				bOutput = false;
-
+		bOutput = true;//일단 다 보이고 IsShowThread(idThrd);
+		if (bOutput){/// 굳이 숨길 것만 숨겨: 너무 자주 뜨는거
+			if(pFunc) {
+				auto itf = DwkOutputFilter::s_setFilterHide.find(pFunc);//함수 이름 가져 와서 그걸로 hide 있나 검색?
+				if (itf != DwkOutputFilter::s_setFilterHide.end())
+					bOutput = false;
+			}
 		}
-		//if(!bOutput)/// id없으면 이름으로 검색
-		//{
-			//if (bOutput = IsShowFunc(sFunc)) {
-			//	s_setFilterShowID[idThrd] = sFunc;//보이는 필터에 thread ID 등록
-			//}
-			//if (s_setFilterShow.size() > 0) {//보이기 필터 면
-			//	auto itf = s_setFilterShow.find(sFunc.GetString());
-			//	if (itf != s_setFilterShow.end()) {
-			//		s_setFilterShowID[idThrd] = sFunc;//보이는 필터에 thread ID 등록
-			//		bOutput = true;//보이는 필터에 함수있슴
-			//	}
-			//} 
-			//else 
-		//}
 	}
-	///[[스레드별 번호 붙이기 시도 보류]] 백그라운드는 각 번호를 달고 있다. output창에 :B@1,2,3 에 따라 색 다르게 보이도록
-	//static std::map<DWORD, int> s_mapThrd;
-	//if (!bFG) {
-	//	auto itr = s_mapThrd.find(idThrd);
-	//	if (itr != s_mapThrd.end())
-	//		iThrd = itr->second;
-	//	else {//비어 있는걸 찾아야지.
-	//		for (auto& [k, v] : s_mapThrd) {
-	//			xxxxxxxxx
-	//		}
-	//	}
-	//}
-	//else
-	//	s_mapThrd[0] = idThrd;
-	//ffmt.Format(L"%%-%ds %%s %%5X:%%c@%%d%%s%%s", KTrace::wHd_); 9B94:B@0 이렇게 하여 0,1,2  에 따라 색 다르게 할려다 보류
 	ffmt.Format(L"%%-%ds %%s %%5X:%%c%%s%%s", KTrace::wHd_);
 	fmt2.Format((PWS)ffmt, fmt1, stm, idThrd, bFG ? L'F' : L'B', /*iThrd,*/ sTab.str().c_str(), btn);
 	//fmt2.Format(L"%-100s %s %5X:%c%s%s", fmt1, stm, idThrd, bFG ? L'F' : L'B', sTab.str().c_str(), btn);
 
 	CStringW fmt;
 	if (bFunc)
-		fmt.Format(L"%s %s # %s\n", fmt2.GetString(), sFunc, sMsg);
+		fmt.Format(L"%s %s # %s\n", fmt2.GetString(), sFunc.GetString(), sMsg.GetString());
 	else
-		fmt.Format(L"%s %s\n", fmt2.GetString(), sMsg);
+		fmt.Format(L"%s %s\n", fmt2.GetString(), sMsg.GetString());
 
 	auto tik = GetTickCount64();
 	auto elap = tik - _lastTik;

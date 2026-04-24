@@ -747,6 +747,7 @@ long UcWriteSmallTextFileA(LPCTSTR filename, CStringA& text, BOOL bOverwrite = T
 UCTOOLDYNAMIC
 long UcWriteSmallTextFileW(LPCWSTR filename, CStringW& text);
 
+UCTOOLDYNAMIC
 CStringA UcGetErrorMsg(UINT err = 0xffffffff);
 UCTOOLDYNAMIC
 CStringW UcErrorToStrW(UINT err = 0xffffffff);
@@ -1129,6 +1130,32 @@ public:
 /// 주의: 매크로 함수 가로는 매크로명에 바짝 붙여야 한다. C7515 에러를 피하기 위해
 #define     throw_str(fmt, ...)                    {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); throw_gen(GetLastError(), VAL_LINE(s, __LINE__));}
 
+/// `throw_if_false` 실패 직전에만 호출된다.
+/// `__debugbreak()` 는 디버거 미부착 시 부작용이 있어 쓰지 않는다.
+/// 대신 본문의 **더미 줄** 에 F9 브레이크 포인트를 걸면, 실패 시 throw 직전에 멈출 수 있다.
+#if defined(_DEBUG) && defined(_MSC_VER)
+__declspec(noinline)
+#endif
+inline void UcThrowIfFalseFailedHook() noexcept
+{// <- 이 줄을 브레이크 포인트 걸어야 최적화 해도 걸림.
+	// 디버깅 앵커: 필요할 때만 이 줄에 (F9) 브레이크 포인트
+	// 릴리즈에서는 최적화 때문에 이 줄이 사라질 수 있습니다.
+	// 하지만 함수 진입의 '{'에는 아무리 최적화해도 브레이크 포인트가 걸립니다.
+	(void)0;
+}
+
+/// `cond` 가 거짓이면 `UcThrowIfFalseFailedHook()` 을 지난 뒤 `throw_str(fmt, ...)` 로 예외를 던진다.
+/// (포인터는 nullptr 이면 거짓.)
+/// 매크로 한 줄 형태보다 `if (!_uc_tif_ok)` 블록이 있어 호출지에서 조건문에도 브레이크를 걸기 쉽다.
+#define throw_if_false(cond, fmt, ...) \
+	do { \
+		const bool _uc_tif_ok = static_cast<bool>(cond); \
+		if (!_uc_tif_ok) { \
+			UcThrowIfFalseFailedHook(); \
+			throw_str(fmt, ##__VA_ARGS__); \
+		} \
+	} while (0)
+
 /// no_throw계열은 throw는 하지 않고, 그냥 출력 또는 기록만 하게 하는 것이다.
 #define  no_throw_str(fmt, ...)                    {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_gen(0, VAL_LINE(s, __LINE__));}
 #define no_throw_str1(fmt)                         {CStringW VAL_LINE(s, __LINE__)(fmt); no_throw_gen(0, VAL_LINE(s, __LINE__));}
@@ -1359,6 +1386,7 @@ std::tuple<CStringW, CStringW, CStringW> UcCutToTwoFolderAndFile(CStringW full, 
 std::vector<CStringW> UcCutPath(CStringW full, int n = 0, WCHAR cut = '\\');
 std::tuple<CStringW, CStringW, CStringW> UcCutFile(CStringW full, WCHAR cut = '\\');
 
+UCTOOLDYNAMIC
 CString UcGetModulePath(BOOL bPathOnly = FALSE);
 
 #include <sstream>
@@ -1710,9 +1738,14 @@ bool UcIsProcessWithArgsRunning(const std::wstring processName, const std::wstri
 LONG UcDeleteKeyWithSubkeys(HKEY hKeyRoot, CString sSubKey);
 
 
+/// WaitForSingleObject 기다릴 려고 굳이 구형 CreateThread를 쓴다.
 template <typename TFNC>
 HANDLE UcCreateThread(TFNC fnc, DWORD attr = 0)
 {
+	//WaitForSingleObject(m_hThread, INFINITE); /// thread가 살아 있는데, 여기서 기다리면 한없이 기다리지.
+	//CloseHandle(m_hThread);
+	//m_hThread = NULL;//중요
+	
 	// std::function을 저장할 포인터
 	auto pFunc = new std::function<int()>(fnc);
 	// 스레드 시작 루틴
@@ -2121,78 +2154,6 @@ shared_ptr<TCL> GetSimpleInstanceClean(Args&&... args) {
 
 
 /// ///////////////////  두번째 방법 ///////////////////////
-/// GSingletonUniqu<MyCla1>::GetInstance() 처럼 그냥 소비하면 만들어 진다.
-/// class type 당 하나만 가능 하다. std::map 를 typedef한 객체 같은 경우는 안된다.
-/// deprecated : 대신에 GSingleton 를 사용한다.
-template<typename TCL>
-class GSingletonUniqu {
-public:
-	static shared_ptr<TCL> GetInstance() {
-#ifdef _DEBUG
-		std::string tName = typeid(TCL).name();
-		static std::set<std::string> setGlobal;
-		auto its = setGlobal.find(tName);
-		if (its == setGlobal.end()) {
-#if CPP17_OR_LATER
-			auto[it1, bOk] = setGlobal.insert(tName);
-#else
-			auto insert_result = setGlobal.insert(tName);
-			auto it1 = insert_result.first;
-			bool bOk = insert_result.second;
-#endif
-			its = it1;
-		}
-		else {
-			ASSERT(0);
-			throw std::exception("recursive call");
-		}
-
-		std::call_once(*initFlag_, [&tName]() {// std::call_once로 초기화를 보장
-			DWKFUNCV(L"<%s>", tName);
-#else
-		std::call_once(*initFlag_, []() {// std::call_once로 초기화를 보장
-#endif
-			instance_ = std::make_shared<TCL>();
-		});
-#ifdef _DEBUG
-		setGlobal.erase(its);
-#endif
-		return instance_;
-		}
-	static void ChangeInstance(shared_ptr<TCL> newInstance) {
-		std::lock_guard<std::mutex> lock(mutex_);
-		instance_ = std::move(newInstance);
-	}
-	static void ChangeInstance(TCL * newPtr, std::function<void(shared_ptr<TCL>)> cbAfter = {}) {
-		std::lock_guard<std::mutex> lock(mutex_);
-		instance_.reset(newPtr);
-		if (cbAfter)
-			cbAfter(instance_);
-	}
-	static void DeleteInstance() {
-		std::lock_guard<std::mutex> lock(mutex_);
-		instance_.reset(); // 인스턴스 해제
-		initFlag_ = std::make_unique<std::once_flag>(); // 새로운 once_flag 생성
-	}
-private:
-	INLINE_STATIC shared_ptr<TCL> instance_;
-	INLINE_STATIC std::unique_ptr<std::once_flag> initFlag_;
-	INLINE_STATIC std::mutex mutex_;
-
-	// C++14 호환성을 위한 초기화
-#if CPP_BEFORE_17
-	static void initStaticMembers() {
-		static bool initialized = false;
-		if (!initialized) {
-			initFlag_ = std::make_unique<std::once_flag>();
-			initialized = true;
-		}
-	}
-#endif
-	};
-
-
-
 
 class MyCla1 {
 public:
@@ -2233,33 +2194,28 @@ sh2->Test();
 /// ///////////////////  세번째 방법 ///////////////////////
 /// GSingleton<MyCla1>::GetInstance() 처럼 그냥 소비하면 만들어 진다.
 /// class type 당 하나만 가능 하다. std::map 를 typedef한 객체 같은 경우는 안된다.
-/// deprecated : 대신에 GSingleton 를 사용한다.
-template<typename TCL>
-class GSingleton {
+//
+//예: KTrace 싱글톤은 UcTool.dll 한 군데에서만 GSingleton<KTrace>를 쓰고,
+//GetKTrace() 같은 __declspec(dllexport) 함수를 따로 둬야 하나만 존재한다.
+//그 함수 안에서만 GSingleton<KTrace>::GetInstance()를 부르면, 정적 저장소는 그 DLL 안에만 생깁니다.
+template<typename TCL> class GSingleton {
 public:
 
 	static shared_ptr<TCL> GetInstance(const std::string& key = "") {//LPCSTR key = "default") {//
 		std::lock_guard<std::mutex> lock(mutex_);
-#ifdef _DEBUG
 		std::string tName = typeid(TCL).name() + (key);
 		DbgCString::ReplaceCString(tName);
-#endif
+
 		auto itf = initFlags_.find(key);
 		if (itf == initFlags_.end()) {
 			initFlags_[key] = std::make_unique<std::once_flag>();
 		}
-#ifdef _DEBUG
+
 		static std::set<std::string> setGlobal;
 		auto its = setGlobal.find(tName);
 		if (its == setGlobal.end()) {
 			//auto [it1, bOk] = setGlobal.insert(tName);
-#if CPP17_OR_LATER
-			auto[it1, bOk] = setGlobal.insert(tName);
-#else
-			auto insert_result = setGlobal.insert(tName);
-			auto it1 = insert_result.first;
-			bool bOk = insert_result.second;
-#endif
+			auto [it1, bOk] = setGlobal.insert(tName);
 			its = it1;
 		}
 		else {
@@ -2267,26 +2223,20 @@ public:
 			throw std::exception("recursive call");
 		}
 		std::call_once(*initFlags_[key], [&key, &tName]() { // std::call_once로 초기화를 보장
-			DWKFUNCV(L"<%s>", tName);
-#else
-		std::call_once(*initFlags_[key], [&key]() { // std::call_once로 초기화를 보장
-#endif
+			/// DWKFUNCV(L"<%s>", tName); 여기서 이거 절대 쓰면 안된다. GSingleton<KTrace> 호출 하면 리커시브 호출 스택오버플러어 난다.
+			TRACE("<%s>(%s)\n", tName.c_str(), key.c_str());
 			instances_[key] = std::make_shared<TCL>();
 		});
-#ifdef _DEBUG
 		setGlobal.erase(its);
-#endif
 		return instances_[key];
 		}
 
 	static void ChangeInstance(shared_ptr<TCL> newInst, std::function<void(shared_ptr<TCL>)> cbAfter = {}, const std::string & key = "") {
 		std::lock_guard<std::mutex> lock(mutex_);
 		instances_[key] = std::move(newInst);
-#ifdef _DEBUG
 		std::string tName = typeid(TCL).name() + (key);
 		DbgCString::ReplaceCString(tName);
 		DWKFUNCV(L"+++ GSingleton::ChangeInstance(%s) shared", tName);
-#endif
 		if (cbAfter)
 			cbAfter(instances_[key]);
 	}
@@ -2301,11 +2251,9 @@ public:
 	static void ChangeInstance(TCL * newPtr, std::function<void(shared_ptr<TCL>)> cbAfter = {}, const std::string & key = "") {
 		std::lock_guard<std::mutex> lock(mutex_);
 		instances_[key].reset(newPtr);
-#ifdef _DEBUG
 		std::string tName = typeid(TCL).name() + (key);
 		DbgCString::ReplaceCString(tName);
 		DWKFUNCV(L"+++ GSingleton::ChangeInstance(%s) ptr", tName);
-#endif
 		if (cbAfter)
 			cbAfter(instances_[key]);
 	}
@@ -2314,18 +2262,15 @@ public:
 		std::lock_guard<std::mutex> lock(mutex_);
 		instances_.erase(key);
 		initFlags_.erase(key); // 새로운 초기화를 위해 삭제
-#ifdef _DEBUG
 		std::string tName = typeid(TCL).name() + (key);
 		DbgCString::ReplaceCString(tName);
 		DWKFUNCV(L"+++ GSingleton::DeleteInstance(%s) ptr", tName);
-#endif
 	}
 
 private:
-	INLINE_STATIC std::map<std::string, shared_ptr<TCL>> instances_; // 키별로 인스턴스 관리
-	INLINE_STATIC std::map<std::string, std::unique_ptr<std::once_flag>> initFlags_; // 키별로 초기화 플래그 관리
-	//#pragma message(FILINDWK("INLINE_STATIC std::mutex GSingleton<TCL>::mutex_ declared."))
-	INLINE_STATIC std::mutex mutex_; // 멀티스레드 안전성 보장
+	static std::map<std::string, shared_ptr<TCL>> instances_; // 키별로 인스턴스 관리
+	static std::map<std::string, std::unique_ptr<std::once_flag>> initFlags_; // 키별로 초기화 플래그 관리
+	static std::mutex mutex_; // 멀티스레드 안전성 보장
 
 	// C++14 호환성을 위한 초기화
 #if CPP_BEFORE_17
@@ -2337,7 +2282,17 @@ private:
 		}
 	}
 #endif
-	};
+};
+
+template<typename TCL>
+std::map<std::string, shared_ptr<TCL>> GSingleton<TCL>::instances_; // 키별로 인스턴스 관리
+
+template<typename TCL>
+std::map<std::string, std::unique_ptr<std::once_flag>> GSingleton<TCL>::initFlags_; // 키별로 초기화 플래그 관리
+
+template<typename TCL>
+std::mutex GSingleton<TCL>::mutex_; // 멀티스레드 안전성 보장
+
 
 #if CPP_BEFORE_17
 // GSingleton 템플릿 클래스의 static 멤버 정의 (C++14용)
@@ -2384,18 +2339,33 @@ sh2->Test();
 #endif // _Samples__
 
 /// 2. 기존에 이미 ClassName::GetInstance() 방식인 경우 기존코드 호환을 위해 static member 함수로 유지
-// shared_ptr로 리턴(포인터처럼 사용)
-#define GetInstance_Global(TCL) static shared_ptr<TCL> GetInstance()\
-									{ return GSingleton<TCL>::GetInstance(#TCL);}
-#define GetInstance_Global_NoKey(TCL) static shared_ptr<TCL> GetInstance()\
-									{ return GSingleton<TCL>::GetInstance();}
+// 이것들은 DLL 모델에서는 각 모듈마다 별도의 인스턴스가 생긴다. 그래서 DLL에서는 GetInstance_Global(TCL) 매크로로 전역 인스턴스 함수를 만들어서 사용한다.
+//[[deprecated]]
+//#define GetInstance_Global(TCL) static shared_ptr<TCL> GetInstance()\
+//									{ return GSingleton<TCL>::GetInstance(#TCL);}
+//[[deprecated]]
+//#define GetInstance_Global_NoKey(TCL) static shared_ptr<TCL> GetInstance()\
+//									{ return GSingleton<TCL>::GetInstance();}
+//
+//// 참조:static local변수는 한번만 초기화 됨
+//[[deprecated]]
+//#define SetSINGLETON(TCL) static shared_ptr<TCL> GetInstance()\
+//									{ static auto shp = std::make_shared<TCL>(); return shp;}
 
-// 참조:static local변수는 한번만 초기화 됨
-#define SetSINGLETON(TCL) static shared_ptr<TCL> GetInstance()\
-									{ static auto shp = std::make_shared<TCL>(); return shp;}
-
-
-
+/// 3. GlobalInstance(TCL) 매크로로 간단하게 전역 인스턴스 함수를 만든다. 
+/// GetInstance_Global(TCL) 처럼 키는 class명과 같다.
+//#define GlobalInstance(TCL) \
+//UCTOOLDYNAMIC \
+//std::shared_ptr<TCL> TCL##_Instance() { \
+//	return GSingleton<TCL>::GetInstance(); \
+//}
+//
+//#define GlobalInstanceKey(TCL, k) \
+//UCTOOLDYNAMIC \
+//std::shared_ptr<TCL> TCL##_Instance() { \
+//	return GSingleton<TCL>::GetInstance(k); \
+//}
+// 이건 잘못 설계 한거다. 삭제 예정//dwk: 2026-04-21 13:44 
 
 
 #ifdef _DEBUGx
@@ -3233,7 +3203,7 @@ inline CRuntimeClass* GetRTClass(TCL* th)
 	if(dynamic_cast<KException*>(e)) throw e;\
 	if(dynamic_cast<CException*>(e)){ CATCH_CEXEPTNORC(e);}\
 	else {throw e;}
-
+/// CObject 객체 함수 안에서
 #define CATCH_ICEXEPTRC(rc) \
 	catch(KException* e)\
 	{	throw e;\
@@ -3258,42 +3228,33 @@ inline CRuntimeClass* GetRTClass(TCL* th)
 	} catch(...)\
 	{	throw new KException("Unknown", GetLastError(), 0, L"Unknown catch(...) Error.", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc);\
 	}
-
+/// CObject 객체 함수 안에서
 #define CATCH_ICEXEPT CATCH_ICEXEPTRC(GetRTClass(this)) //dynamic_cast<CObject*>(this) ? this->GetRuntimeClass() : NULL)
-
+/// CObject 객체 함수 안에서
 #define CATCH_ICEXEPTRCLOG(rc) \
 	catch(KException* e)\
-	{	_log_.Error(e); throw e; \
-	}\
+	{	_log_.Error(e); throw e; }\
 	catch(CException* e)\
 	{	auto buf = new WCHAR(1024);	KAtEnd d_buf([&]() { delete buf; }); \
 		e->GetErrorMessage(buf, 1000); \
 		_log_.Error(e); throw new KException("CException", GetLastError(), 0, buf, NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
 	}\
 	catch(std::exception &e)\
-	{	CStringW ws(e.what()); _log_.Error(ws); throw new KException("std::exception", -1, 0, CStringW(e.what()), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	CStringW ws(e.what()); _log_.Error(ws); throw new KException("std::exception", -1, 0, CStringW(e.what()), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(LPCWSTR e)\
-	{	_log_.Error(e); throw new KException("LPCWSTR", GetLastError(), 0, e, NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	_log_.Error(e); throw new KException("LPCWSTR", GetLastError(), 0, e, NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(CStringW e)\
-	{	_log_.Error(e); throw new KException("CStringW", GetLastError(), 0, e, NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	_log_.Error(e); throw new KException("CStringW", GetLastError(), 0, e, NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(CStringA e)\
-	{	CStringW ws(e); _log_.Error(ws); throw new KException("CStringA", GetLastError(), 0, CStringW(e), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	CStringW ws(e); _log_.Error(ws); throw new KException("CStringA", GetLastError(), 0, CStringW(e), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(LPCSTR e)\
-	{	CStringW ws(e); _log_.Error(ws); throw new KException("LPCSTR", GetLastError(), 0, CStringW(e), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	CStringW ws(e); _log_.Error(ws); throw new KException("LPCSTR", GetLastError(), 0, CStringW(e), NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(int e)\
-	{	CStringW ws; ws.Format(L"%d", e); _log_.Error(ws); throw new KException("int", 0, e, L"", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	CStringW ws; ws.Format(L"%d", e); _log_.Error(ws); throw new KException("int", 0, e, L"", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(long e)\
-	{	CStringW ws; ws.Format(L"%d", e); _log_.Error(ws); throw new KException("long", 0, e, L"", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}\
+	{	CStringW ws; ws.Format(L"%d", e); _log_.Error(ws); throw new KException("long", 0, e, L"", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }\
 	catch(...)\
-	{	_log_.Error(L"..."); throw new KException("Unknown", GetLastError(), 0, L"Unknown catch(...) Error.", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); \
-	}
+	{	_log_.Error(L"..."); throw new KException("Unknown", GetLastError(), 0, L"Unknown catch(...) Error.", NULL, __FUNCTIONW__, __LINE__, __FILE__, rc); }
 
 /// 관련 로그는 KException 안에서 처리 하는 법
 #define CATCH_ICEXEPTLOG CATCH_ICEXEPTRCLOG(GetRTClass(this)) //dynamic_cast<CObject*>(this) ? this->GetRuntimeClass() : NULL)

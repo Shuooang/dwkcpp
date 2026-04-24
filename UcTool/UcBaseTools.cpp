@@ -157,9 +157,9 @@ void SampleList() {//dwk: 2025-02-24 17:27 KList 테스트
 	auto pos2n = l2.GetNext(pos2);
 	auto pos2t = l2.GetTailPosition();
 	auto pos2p = l2.GetPrev(pos2t);
-	KList<SHP<MyObj5>> l3 = { NEWSH<MyObj5>(1), NEWSH<MyObj5>(2), NEWSH<MyObj5>(3), };
+	KList<SHP<MyObj5>> l3 = { NEWSHP(MyObj5, 1), NEWSHP(MyObj5, 2), NEWSHP(MyObj5, 3), };
 	//KSharedPtrList<MyObj5> l3 = { NEWSH<MyObj5>(1), NEWSH<MyObj5>(2), NEWSH<MyObj5>(3), };
-	l3.AddHead(NEWSH<MyObj5>(1));
+	l3.AddHead(NEWSHP(MyObj5, 1));
 	auto pos3 = l3.GetHeadPosition();
 	auto pos3n = l3.GetNext(pos3);
 }

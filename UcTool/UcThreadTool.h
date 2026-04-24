@@ -452,7 +452,23 @@ public:
 	template<typename Func>
 	UcThread(Func&& fn, LPCWSTR tag = nullptr) {
 		// 람다(특히 중첩·mutable 캡처)를 그대로 std::thread에 넘기면 MSVC가 void(*)(void) 쪽으로
-		std::function<void()> job = std::forward<Func>(fn);
+		//std::function<void()> job = std::forward<Func>(fn);
+		SetFunction(fn);
+		//_th = std::thread([this, job = std::move(job), tag]() mutable {
+		//	try {
+		//		try {
+		//			job();//job = nullptr;   // 이 경우 mutable 이 필요
+		//		}
+		//		UCCATCH_ALL;/// 이것은 rethrow 하기 때문에 다시 try{}catch{}해야 한다.
+		//		///KException.s_fncExceptionDealer를 채워야 로그 처리가 된다.
+		//	}
+		//	catch (...) {
+		//		_break;
+		//	}
+		//	});
+	}
+	void SetFunction(std::function<void()> job, LPCWSTR tag = nullptr) {
+		ASSERT(!_th.joinable());
 		_th = std::thread([this, job = std::move(job), tag]() mutable {
 			try {
 				try {
@@ -465,6 +481,24 @@ public:
 				_break;
 			}
 			});
+		//_th = std::thread([this, fn = std::move(fn)]() mutable {
+		//	try {
+		//		try {
+		//			fn();
+		//		}
+		//		UCCATCH_ALL;
+		//	}
+		//	catch (...) {
+		//		_break;
+		//	}
+		//	});
+	}
+	template<typename Func>
+	UcThread& operator=(Func&& fn) {
+		SetFunction(fn);
+		//ASSERT(!_th.joinable());
+		//_th = std::thread(std::forward<Func>(fn));
+		return *this;
 	}
 	bool joinable() const noexcept { return _th.joinable(); }
 	void join() { if (_th.joinable()) _th.join(); }

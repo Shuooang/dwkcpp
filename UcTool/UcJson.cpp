@@ -44,12 +44,14 @@
 #endif
 using namespace std;
 
+DWKREMINDER("매크로 남발 하지 말자. 비슷한 코드가 반복 되더라도 함수 정의는 그대로 해야 찾기 편하다.")
+
 
 COleDateTime UcJObj::__base(1980, 1, 1, 0, 0, 0);
 
 
 
-BOOL UcJObj::s_bSkipFieldCheck{ TRUE };
+//BOOL UcJObj::s_bSkipFieldCheck{ TRUE };
 
 ///                 FUNCTION LINE ERROR   JSON_POS   JSON_LINE   JSON_COLUMN
 std::list<JException> UcJson::s_errors;
@@ -950,7 +952,7 @@ ShJVal ParseXmlNode<char>(rpx::xml_node<char>* node)
 			if (attrNameW.Left(1) == L"_") {
 				if (attrNameW == TAG_TPY) {
 					typeHint = attrValueUnescaped;  // 타입 힌트 저장
-					DWKREMINDER("__type__ UcJbj에 저장 되지 않는다. RECT는 __struct__ 저장한다.");
+					//DWKREMINDER("__type__ UcJbj에 저장 되지 않는다. RECT는 __struct__ 저장한다.");
 					continue;
 				}
 			}
@@ -5017,6 +5019,53 @@ ShJObj UcJObj::MergeJsonObj(ShJObj parent, ShJObj child)
 	return result;
 	}
 
+SHP<UcJTable> UcJObj::Table(UcJObj* pbj) //dwk: 2026-03-25 15:10
+{
+	if (pbj == nullptr)
+		throw_str(L"pbj is null.");
+
+	auto tb = NEWSHP(UcJTable);
+	tb->_tbl = pbj;
+
+	CStringW ty = tb->_tbl->S(L"type", L"");
+	if (ty != L"table")
+		throw_str(L"UcJObj::Cell table type must be \"table\" (got \"%s\").", ty.GetString());
+	tb->_fields = tb->_tbl->A(L"fields", false);
+	tb->_rows = tb->_tbl->A(L"rows", false);
+	if (!tb->_fields)
+		throw_str(L"UcJObj::Cell table missing \"fields\" array.");
+	if (!tb->_rows)
+		throw_str(L"UcJObj::Cell table missing \"rows\" array.");
+	{
+		auto pFields = tb->_fields->Arr();
+		if (!pFields)
+			throw_str(L"UcJObj::Cell table fields is null.");
+		for (int i = 0; i < (int)pFields->size(); ++i)
+		{
+			ShJVal sf = pFields->GetAt(i);
+			if (!sf || !sf->IsVal())
+				throw_str(L"UcJObj::Cell table fields[%d] is invalid.", i);
+			CStringW colName;
+			auto fv = sf->Val();
+			if (fv->IsObject()) {
+				auto fo = fv->AsObjPtr();
+				colName = fo ? fo->S(L"name", L"") : CStringW{};
+			}
+			else {
+				colName = fv->S(L"");
+			}
+			colName.Trim();
+			if (colName.IsEmpty())
+				throw_str(L"UcJObj::Cell table fields[%d] has empty name.", i);
+			std::wstring key = colName.GetString();
+			if (tb->_mFieldCol.find(key) != tb->_mFieldCol.end())
+				throw_str(L"UcJObj::Cell table duplicate field name \"%s\".", key.c_str());
+			tb->_mFieldCol[key] = i;
+		}
+	}
+	return tb;
+}
+
 /*
 /// 여러 개의 기본값을 한 번에 설정 (가변 매개변수)
 template<typename... Args>
@@ -5762,9 +5811,28 @@ bool UcJson::SaveXmlToFile(const ShJVal value, const std::wstring& filePath)
 }
 
 
+ShJBase UcJTable::RowObj(size_t row)
+{
+	auto shObj = NEWSHP(UcJObj);
+
+	// _mFieldCol : vector<pair<fieldName, colIndex>>
+	for (const auto& fc : _mFieldCol) {
+		const auto& fieldName = fc.first;
+		const size_t colIdx = fc.second;
+		auto sRow = GetCell(colIdx, row);//ShJBase
+		//JVal* pVal = Cell(colIdx, row);
+		if (sRow) {
+			shObj->Set(fieldName, sRow);// std::make_shared<JVal>(*pVal));
+		}
+	}//                      *shObj, false  주면 안됨 true 줘야 해
+	auto shVal = NEWSHP(JVal, shObj, false);//no copy, just share the pointer to the same object.
+	return shVal;
+}
+
 //dwk: 2025-12-01 16:52 
 //dwk: 2025-12-09 17:18 map val, 2D vector
 //dwk: 2025-12-10 13:10 UcJXBase.h 제거
 //dwk: 2025-12-18 12:44  vect<std::string>
 //dwk: 2025-12-19 16:03 CStringArray 추가 체크 리스트에만 누락
 //dwk: 2025-12-19 18:05 공백문자열을 항목을 무시하는 경우 수정
+//dwk: 2026-04-17 11:11 UcJTable::RowObj

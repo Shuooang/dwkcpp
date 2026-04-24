@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UcTool", "UcTool.vcxproj", "{EE5860F2-53E3-4691-8D76-D046756596F4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		DbgDll|x64 = DbgDll|x64
+		DbgDll|x86 = DbgDll|x86
+		DbgStc|x64 = DbgStc|x64
+		DbgStc|x86 = DbgStc|x86
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		RelDll|x64 = RelDll|x64
+		RelDll|x86 = RelDll|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+		RelStc|x64 = RelStc|x64
+		RelStc|x86 = RelStc|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgDll|x64.ActiveCfg = DbgDll|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgDll|x64.Build.0 = DbgDll|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgDll|x86.ActiveCfg = DbgDll|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgDll|x86.Build.0 = DbgDll|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgStc|x64.ActiveCfg = DbgStc|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgStc|x64.Build.0 = DbgStc|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgStc|x86.ActiveCfg = DbgStc|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.DbgStc|x86.Build.0 = DbgStc|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Debug|x64.ActiveCfg = Debug|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Debug|x64.Build.0 = Debug|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Debug|x86.ActiveCfg = Debug|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Debug|x86.Build.0 = Debug|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelDll|x64.ActiveCfg = RelDll|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelDll|x64.Build.0 = RelDll|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelDll|x86.ActiveCfg = RelDll|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelDll|x86.Build.0 = RelDll|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Release|x64.ActiveCfg = Release|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Release|x64.Build.0 = Release|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Release|x86.ActiveCfg = Release|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.Release|x86.Build.0 = Release|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelStc|x64.ActiveCfg = RelStc|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelStc|x64.Build.0 = RelStc|x64
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelStc|x86.ActiveCfg = RelStc|Win32
+		{EE5860F2-53E3-4691-8D76-D046756596F4}.RelStc|x86.Build.0 = RelStc|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0C0F8B82-172D-4249-8219-C6D788823CBA}
+	EndGlobalSection
+EndGlobal

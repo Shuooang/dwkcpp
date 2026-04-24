@@ -19,6 +19,8 @@
 #include "UcNetwork.h"
 #include "UcDebug.h"
 
+DWKREMINDER("tmplate GSingleton<T>은 모듈마다 만들어 지므로, UCTOOLDYNAMIC GetKTrace() export 된 함수를 따로 만들어야 한다.")
+
 // C++14 호환성을 위한 static 멤버 정의
 #if CPP_BEFORE_17
 //#pragma message(FILINDWK("C++14 is supported. (Not C++17)"))
@@ -37,7 +39,6 @@ std::mutex GCStringBuffer::s_bufferMutex;
 
 
 // C++14에서만 필요한 명시적 인스턴스화
-#if CPP_BEFORE_17
 // 실제 사용되는 타입들에 대한 명시적 인스턴스화
 DWKREMINDER("실제 사용되는 GSingleton<KStdMap<__int64, KLambdaTimer*>>::mutex_ defined.")
 template class GSingleton<KStdMap<__int64, KLambdaTimer*>>;
@@ -52,7 +53,8 @@ template class GSingleton<UcSharedPtrTool>;
 template class GSingleton<MyCla1>;
 template class GSingleton<MyCla2>;
 #endif
-#endif
+
+
 
 #ifdef _Sample__
 class CMyData : public CObject
@@ -4532,6 +4534,7 @@ bool UcErrorFound(int toFind)
 //{
 //}
 //CStringA UcGetErrorMsg(UINT err = 0xffffffff);
+UCTOOLDYNAMIC
 CStringA UcGetErrorMsg(UINT err)
 {
 	LPWSTR errorMessageBuffer = nullptr;
@@ -5284,6 +5287,7 @@ CStringW UcGetProductName()
 	return sPrd;
 }
 
+UCTOOLDYNAMIC
 CString UcGetModulePath(BOOL bPathOnly)
 {
 	CString sPath;
@@ -5309,6 +5313,9 @@ CString UcGetModulePath(BOOL bPathOnly)
 	}
 
 	sPath.ReleaseBuffer();
+	auto sExt = sPath.Right(3);
+	sExt.MakeLower();
+	ASSERT(sExt != L"dll");
 	if (sPath.GetLength() > 0) {
 		if (bPathOnly) {
 			auto irv = sPath.ReverseFind('\\');

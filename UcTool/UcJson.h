@@ -4,6 +4,7 @@
 
 #include <memory>  // 스마트 포인터 포함
 #include <array>   // std::array 포함
+#include <initializer_list>
 #include <type_traits>  // std::enable_if, std::is_same 등 포함
 #include <functional>  // std::function 포함
 #include <xutility>
@@ -118,10 +119,10 @@ public:
 };
 
 
-using ShJBase = shared_ptr<JBase>;
-using ShJVal = shared_ptr<JBase>;
-using ShJObj = shared_ptr<JBase>;
-using ShJArr = shared_ptr<JBase>;
+using ShJBase = shared_ptr<JBase>; /// 앞으로 이거만 써야 한다.
+using ShJVal = shared_ptr<JBase>;//[[deprecated("ShJVal is deprecated, use ShJBase instead.")]]
+using ShJObj = shared_ptr<JBase>;//[[deprecated("ShJObj is deprecated, use ShJBase instead.")]]
+using ShJArr = shared_ptr<JBase>;//[[deprecated("ShJArr is deprecated, use ShJBase instead.")]]
 
 
 class UCTOOLDYNAMIC JUnit
@@ -372,6 +373,8 @@ public:
 	ShJArr _fields;// = tbl->A(L"fields", false);
 	ShJArr _rows;// = tbl->A(L"rows", false);
 	std::map<std::wstring, int> _mFieldCol;
+
+	UcJObj* JObj() { return _tbl; }
 public:
 	size_t ColSize();
 	size_t RowSize();
@@ -400,6 +403,10 @@ private:
 			// Col()은 내부에서 throw_str로 실패를 처리하므로, 음수/0 캐스팅 걱정이 없다.
 			return Col((LPCWSTR)col);
 		}
+		else if constexpr (std::is_convertible_v<DCol, LPCSTR>) {
+			// Col()은 내부에서 throw_str로 실패를 처리하므로, 음수/0 캐스팅 걱정이 없다.
+			return Col((LPCSTR)col);
+		}
 		else {
 			static_assert(_always_false<DCol>::value, "UcJTable::Cell* unsupported col type");
 			return 0;
@@ -407,16 +414,25 @@ private:
 	}
 public:
 	int Col(LPCWSTR colName);
+	int Col(LPCSTR colName);
 
 	int Col(const std::wstring& colName) { return Col(colName.c_str()); }
 
 	JVal* Cell(size_t col, size_t row);
+	ShJBase GetRow(size_t row);
+	ShJBase GetCell(size_t col, size_t row);
+	// Cell은 Row 중 하나 이기 때문에 GetCol 은 없다.
 
+	/// TCol 번호(0,1,2...) 일수도 있고, 열 이름일 수도 있다. 열 이름이면 내부적으로 번호로 바꿔서 Cell()을 호출한다.
 	template <typename TCol>
 	JVal* Cell(const TCol& col, size_t row) { return Cell(ColIndex(col), row); }
 	
 	template <typename TCol>
 	CStringW CellS(const TCol& col, size_t row, LPCWSTR def = L"") { return Cell(col, row)->S(def); }
+	template <typename TCol>
+	CStringA CellSA(const TCol& col, size_t row, LPCSTR def = "") { 
+		return CStringA(Cell(col, row)->S(def));
+	}
 
 	template <typename TCol>
 	int      CellI(const TCol& col, size_t row, int def = 0) { return Cell(col, row)->I(def); }
@@ -429,6 +445,12 @@ public:
 
 	template <typename TCol>
 	float    CellF(const TCol& col, size_t row, float def = 0.f) { return (float)Cell(col, row)->N((double)def); }
+
+	// INSERT_YOUR_CODE
+	/// 지정한 row(행)의 모든 필드를 읽어, UcJObj로 모아 반환한다.
+	/// @param row: 추출할 row index
+	/// @return: 각 필드가 key-value로 들어간 ShJObj(shared_ptr<UcJObj>)
+	ShJBase RowObj(size_t row);
 };
 
 
@@ -443,8 +465,23 @@ public:
 class UCTOOLDYNAMIC UcJObj : public KStdMap<jstring, ShJVal>, public JBase
 {
 public:
+	struct InitItem {
+		jstring key;
+		ShJVal val;
+
+		template<typename TKEY>
+		InitItem(TKEY k, ShJVal v)
+			: key(PTstr(k)), val(v)
+		{
+		}
+
+		template<typename TKEY, typename TVAL>
+		InitItem(TKEY k, const TVAL& v);
+	};
+
 	UcJObj() {}
 	~UcJObj() override {};
+	UcJObj(std::initializer_list<InitItem> initList);
 
 	UcJObj(UcJObj& jobj) noexcept
 	{
@@ -489,6 +526,7 @@ public:
 		ASSERT(IsDic());
 		Clone(sjo->Dic(), true);
 	}
+	void operator=(std::initializer_list<InitItem> initList);
 
 	BOOL IsSame(UcJObj& jbj2);
 	BOOL operator==(UcJObj& jbj2)
@@ -506,7 +544,9 @@ public:
 	void toString();
 
 	function<BOOL(jstring& k)> _fncFieldCheck;
-	static BOOL s_bSkipFieldCheck;// {FALSE};
+	inline static BOOL s_bSkipFieldCheck; // {FALSE};
+	//export된 static변수도 
+
 	template <typename TKEY>
 	void Set(TKEY k, ShJVal val)
 	{
@@ -1160,6 +1200,12 @@ public:
 	template <typename TKEY>
 	ShJVal O(TKEY k, bool bCreat = false);
 
+
+	SHP<UcJTable> Table() {
+		return Table((UcJObj*)this);
+	}
+	SHP<UcJTable> Table(UcJObj* pbj);//dwk: 2026-03-25 15:10 
+
 	template <typename TKEY>
 	SHP<UcJTable> Table(TKEY k);//dwk: 2026-03-25 15:10 
 
@@ -1292,17 +1338,16 @@ public:
 		}
 		return true;
 	}
-#define IsValTYPE_decl(TYPE) \
-	template <typename TKEY> bool Is##TYPE(TKEY k);
+	
 
-	IsValTYPE_decl(String);
-	IsValTYPE_decl(Array);
-	IsValTYPE_decl(Object);
-	IsValTYPE_decl(Number);
-	IsValTYPE_decl(Double);
-	IsValTYPE_decl(Int64);
-	IsValTYPE_decl(Int);
-	IsValTYPE_decl(Null);
+	template <typename TKEY> bool IsString(TKEY k);
+	template <typename TKEY> bool IsArray(TKEY k);
+	template <typename TKEY> bool IsObject(TKEY k);
+	template <typename TKEY> bool IsNumber(TKEY k);
+	template <typename TKEY> bool IsDouble(TKEY k);
+	template <typename TKEY> bool IsInt64(TKEY k);
+	template <typename TKEY> bool IsInt(TKEY k);
+	template <typename TKEY> bool IsNull(TKEY k);
 
 
 	std::wstring ToJsonStringWStr(int lvPreety = 2, function<int(LPCWSTR, int)> cbChk = NULL);
@@ -2033,11 +2078,12 @@ public:
 
 
 
-
-
-
-
-
+/// std::static_pointer_cast<JBase>(std::move(p));
+// 함수 의미 설명: 
+// std::shared_ptr<JVal> 타입의 포인터 p를 std::shared_ptr<JBase> 타입으로 변환하여 반환한다.
+// JVal은 JBase를 상속받으므로, std::static_pointer_cast를 통해 안전하게 상위 타입 포인터로 변환 가능하다.
+// move(p)를 쓰는 이유는 소유권을 이전하여 불필요한 참조 카운트 증가를 방지하려는 의도.
+// 주로 JVal 스마트 포인터를, JBase를 사용하는 곳에 전달할 때 사용하는 변환 함수.
 
 /// <summary>
 /// static JSON 파서 및 유틸리티 클래스
@@ -2964,62 +3010,18 @@ inline ShJObj UcJObj::O(TKEY k, bool bCreat)
 	return {};//ShJObj();
 }
 
+
 template <typename TKEY>
-inline SHP<UcJTable> UcJObj::Table(TKEY tableKey)//dwk: 2026-03-25 15:10 
+SHP<UcJTable> UcJObj::Table(TKEY key)//dwk: 2026-03-25 15:10 
 {
-	auto& root = *this;
-	if (tableKey.empty())
-		throw_str(L"UcJObj::Cell table name is empty.");
-	if (!root.Has(tableKey.c_str()))
-		throw_str(L"UcJObj::Cell table \"%s\" not found.", tableKey.c_str());
-	SHP<UcJTable> tb = NEWSHP(UcJTable);
-	ShJObj shTbl = root.O(tableKey.c_str(), false);
+	ShJObj shTbl = this->O(key, false);
 	if (!shTbl || !shTbl->IsDic())
-		throw_str(L"UcJObj::Cell table \"%s\" is not a JSON object.", tableKey.c_str());
-	tb->_tbl = shTbl->Dic();
-	if (!tb->_tbl)
-		throw_str(L"UcJObj::Cell table \"%s\" Dic() is null.", tableKey.c_str());
-	CStringW ty = tb->_tbl->S(L"type", L"");
-	if (ty != L"table")
-		throw_str(L"UcJObj::Cell table \"%s\" type must be \"table\" (got \"%s\").", tableKey.c_str(), ty.GetString());
-	tb->_fields = tb->_tbl->A(L"fields", false);
-	tb->_rows = tb->_tbl->A(L"rows", false);
-	if (!tb->_fields)
-		throw_str(L"UcJObj::Cell table \"%s\" missing \"fields\" array.", tableKey.c_str());
-	if (!tb->_rows)
-		throw_str(L"UcJObj::Cell table \"%s\" missing \"rows\" array.", tableKey.c_str());
-	{
-		auto pFields = tb->_fields->Arr();
-		if (!pFields)
-			throw_str(L"UcJObj::Cell table \"%s\" fields is null.", tableKey.c_str());
-		for (int i = 0; i < (int)pFields->size(); ++i)
-		{
-			ShJVal sf = pFields->GetAt(i);
-			if (!sf || !sf->IsVal())
-				throw_str(L"UcJObj::Cell table \"%s\" fields[%d] is invalid.", tableKey.c_str(), i);
-			CStringW colName;
-			auto fv = sf->Val();
-			if (fv->IsObject()) {
-				auto fo = fv->AsObjPtr();
-				colName = fo ? fo->S(L"name", L"") : L"";
-			}
-			else {
-				colName = fv->S(L"");
-			}
-			colName.Trim();
-			if (colName.IsEmpty())
-				throw_str(L"UcJObj::Cell table \"%s\" fields[%d] has empty name.", tableKey.c_str(), i);
-			std::wstring key = colName.GetString();
-			if (tb->_mFieldCol.find(key) != tb->_mFieldCol.end())
-				throw_str(L"UcJObj::Cell table \"%s\" duplicate field name \"%s\".", tableKey.c_str(), key.c_str());
-			tb->_mFieldCol[key] = i;
-		}
-	}
-	return tb;
+		return {};
+	return Table(shTbl->Dic());
 }
 
 template <typename TKEY>
-inline void UcJObj::Inc(TKEY k, int inc)
+void UcJObj::Inc(TKEY k, int inc)
 {
 	ASSERT(inc != 0);
 	auto kw = PTstr(k);
@@ -3029,6 +3031,7 @@ inline void UcJObj::Inc(TKEY k, int inc)
 	else
 		sjv->Val()->Inc(inc);
 }
+
 template <typename TKEY>
 UcJArr& UcJObj::SetArray(TKEY k)
 {
@@ -3037,21 +3040,47 @@ UcJArr& UcJObj::SetArray(TKEY k)
 	return *sjv->Val()->Arr();
 }
 
-
-#define IsValTYPE(TYPE) \
-		template <typename TKEY> inline bool UcJObj::Is##TYPE(TKEY k) \
-		{	ShJVal sjv;\
-			return Lookup(PTstr(k), sjv) ? sjv->Val()->Is##TYPE() : false;\
-		}
-
-IsValTYPE(String);
-IsValTYPE(Array);
-IsValTYPE(Object);
-IsValTYPE(Number);
-IsValTYPE(Double);
-IsValTYPE(Int64);
-IsValTYPE(Int);
-IsValTYPE(Null);
+//DWKREMINDER("매크로 남발 하지 말자. 비슷한 코드가 반복 되더라도 함수 정의는 그대로 해야 찾기 편하다.")
+template <typename TKEY> inline bool UcJObj::IsString(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsString() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsArray(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsArray() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsObject(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsObject() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsNumber(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsNumber() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsDouble(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsDouble() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsInt64(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsInt64() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsInt(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsInt() : false;
+}
+template <typename TKEY> inline bool UcJObj::IsNull(TKEY k){
+	ShJVal sjv;
+	return Lookup(PTstr(k), sjv) ? sjv->Val()->IsNull() : false;
+}
+//IsValTYPE(String);
+//IsValTYPE(Array);
+//IsValTYPE(Object);
+//IsValTYPE(Number);
+//IsValTYPE(Double);
+//IsValTYPE(Int64);
+//IsValTYPE(Int);
+//IsValTYPE(Null);
 
 
 //}; // Kw
@@ -3454,7 +3483,15 @@ void UcJsonSave(UcJObj& jDocData, CFile& oFile, function<int(LPCWSTR, int)> cbCh
 int UcJsonLoad(SHP<JBase>& jDocData, CFile& oFile, function<int(int, int, LPCWSTR)> cb = nullptr);
 int UcJsonLoad(SHP<JBase>& jDocData, CString sFile);
 int UcJsonLoad(SHP<JBase>& jDocData, LPCSTR psUtf8, DWORD len, function<int(int, int, LPCWSTR)> cb = nullptr);
+
+UCTOOLDYNAMIC
 int UcJsonLoad(SHP<JBase>& jDocData, LPCWSTR sWstr, DWORD len, function<int(int, int, LPCWSTR)> cb = nullptr);
+
+inline SHP<JBase> UcJsonLoad(LPCWSTR sWstr, DWORD len, function<int(int, int, LPCWSTR)> cb = nullptr){
+	SHP<JBase> jDocData;
+	int rv = UcJsonLoad(jDocData, sWstr, len, cb);
+	return jDocData;
+}
 int UcJsonLoad(UcJObj& jDocData, CFile& oFile, function<int(int, int, LPCWSTR)> cb = nullptr);
 
 void UcJsonSave(UcJObj& jDocData, CString sPath, BOOL bBackup = FALSE, int nDayExpire = 0, int preety = 3);
@@ -3485,6 +3522,7 @@ inline size_t UcJTable::RowSize()
 		throw_str(L"no fields.");
 	auto rows = _rows->Arr();
 	return rows->size();
+	int Col(LPCSTR colName);
 }
 inline int UcJTable::Col(LPCWSTR colName)
 {
@@ -3496,22 +3534,70 @@ inline int UcJTable::Col(LPCWSTR colName)
 		throw_str(L"UcJTable::Col() field \"%s\" not found.", key.c_str());
 	return it->second;
 }
-inline JVal* UcJTable::Cell(size_t col, size_t row)
+inline int UcJTable::Col(LPCSTR colName)
+{
+	CStringW wColName(colName);
+	return Col(wColName.GetString());
+}
+
+//dwk: 2026-04-21 14:59 UcJTable::GetRow 새로 추가
+inline ShJBase UcJTable::GetRow(size_t row)
 {
 	UcJArr* pFields = _fields->Arr();
 	UcJArr* pRows = _rows->Arr();
-	const size_t nCol = pFields->size();
 	const size_t nRow = pRows->size();
-	if (col >= nCol)
-		throw_str(L"UcJObj::Cell table col %zu out of range (%zu).", col, nCol);
 	if (row >= nRow)
-		throw_str(L"UcJObj::Cell table row %zu out of range (%zu).", row, nRow);
-	ShJVal sRow = pRows->GetAt((int)row);
+		throw_str(L"GetRow table row %v out of range (%v).", row, nRow);
+	ShJBase sRow = pRows->GetAt((int)row);
+	if (!sRow)
+		throw_str(L"GetRow table row is not JVal(%v).", row);
+	if (!sRow->IsArr())
+		throw_str(L"GetRow row(%v) is not array.", row);
+	return sRow;
+}
+inline ShJBase UcJTable::GetCell(size_t col, size_t row)
+{
+	ShJBase sRow = GetRow(row);
+	if (!sRow->IsArr())
+		throw_str(L"GetCell row(%v) is not array.", row);
+	auto arrRow = sRow->Arr();
+	const size_t rowColSize = arrRow->size();
+	if (col >= rowColSize)
+		throw_str(L"GetCell table col %v out of range for row %v (%v).", col, row, rowColSize);
+	ShJBase cell = arrRow->GetAt((int)col);//dwk: 2026-04-21 14:59 //여기 col 적용을 누락 했군.
+	return cell;
+}
+
+inline JVal* UcJTable::Cell(size_t col, size_t row)
+{
+	ShJBase sRow = GetCell(col, row);// pRows->GetAt((int)row);
 	if (!sRow->IsVal())
-		throw_str(L"UcJObj::Cell table row is not JVal(%zu, %zu).", col, row);
+		throw_str(L"UcJObj::Cell table row is not JVal(%v, %v).", col, row);
 	auto pVal = sRow->Val();
 	ASSERT(pVal);
 	return pVal;
+}
+
+template<typename TKEY, typename TVAL>
+inline UcJObj::InitItem::InitItem(TKEY k, const TVAL& v)
+	: key(PTstr(k))
+	, val(make_shared<JVal>(v))
+{
+}
+
+inline UcJObj::UcJObj(std::initializer_list<InitItem> initList)
+{
+	for (const auto& it : initList) {
+		Set(it.key.c_str(), it.val);
+	}
+}
+
+inline void UcJObj::operator=(std::initializer_list<InitItem> initList)
+{
+	clear();
+	for (const auto& it : initList) {
+		Set(it.key.c_str(), it.val);
+	}
 }
 
 

@@ -31,7 +31,7 @@ inline LPCWSTR GetDevIDE()
 #endif
 }
 #if UC_LANG >= 201703L
-DWKWARN("C++17 is supported. in "DWSTR(PROJECT_NAME))
+//DWKWARN("C++17 is supported. in "DWSTR(PROJECT_NAME))
 #define CPP17_OR_LATER 1
 #define CPP_BEFORE_17 0 
 #define INLINE_STATIC inline static
@@ -438,7 +438,7 @@ inline std::shared_ptr<T> DSHCAST(const std::shared_ptr<U>& ptr) {
 //using MSHP = std::make_shared<T>; 안된다.
 
 /// not used yet
-#define NEWSH std::make_shared
+//#define NEWSH std::make_shared
 #define NEWSHP(TYPE, ...) std::make_shared<TYPE>(__VA_ARGS__)
 typedef std::wstringstream Tss;
 typedef std::stringstream Tas;
@@ -2669,6 +2669,7 @@ void UcStdRemoveChars(TStr & str, const typename TStr::value_type * chars)
 /// </summary>
 /// <param name="k"></param>
 /// <returns></returns>
+#if CPP_BEFORE_17
 inline std::wstring PTstr(LPCSTR k) {
 	CStringW kw(k);// CStringW(lp)
 	return std::wstring(kw);//
@@ -2679,25 +2680,61 @@ inline std::wstring PTstr(int kw) {
 inline std::wstring PTstr(LPCWSTR kw) {
 	return std::wstring(kw);
 }
-inline std::wstring& PTstr(std::wstring & kw) {
+inline std::wstring& PTstr(std::wstring& kw) {
 	return kw;
 }
-#if CPP17_OR_LATER
-inline std::wstring PTstr(std::wstring_view kw) {
-	return std::wstring(kw.data());
-}
-#endif
-inline std::wstring PTstr(CStringA & ka) {
+inline std::wstring PTstr(CStringA& ka) {
 	CStringW kw(ka);
 	return std::wstring((LPCWSTR)kw);
 }
-inline std::wstring PTstr(CStringW & kw) {
+inline std::wstring PTstr(CStringW& kw) {
 	return std::wstring((LPCWSTR)kw);
 }
-inline std::wstring PTstr(const std::string & ks) {
+inline std::wstring PTstr(const std::string& ks) {
 	CStringW kw(ks.c_str());
 	return std::wstring((LPCWSTR)kw);
 }
+#else
+template<typename>
+struct UcPstrAlwaysFalse : std::false_type {};
+
+template<typename T>
+inline std::wstring PTstr(T&& k)
+{
+	using U = std::decay_t<T>;
+
+	if constexpr (std::is_same_v<U, std::wstring>) {
+		return std::forward<T>(k);
+	}
+	else if constexpr (std::is_same_v<U, std::wstring_view>) {
+		return std::wstring(k.begin(), k.end());
+	}
+	else if constexpr (std::is_same_v<U, const wchar_t*> || std::is_same_v<U, wchar_t*>) {
+		return k ? std::wstring(k) : std::wstring();
+	}
+	else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
+		CStringW kw(k);
+		return std::wstring((LPCWSTR)kw);
+	}
+	else if constexpr (std::is_same_v<U, CStringW>) {
+		return std::wstring((LPCWSTR)k);
+	}
+	else if constexpr (std::is_same_v<U, CStringA>) {
+		CStringW kw(k);
+		return std::wstring((LPCWSTR)kw);
+	}
+	else if constexpr (std::is_same_v<U, std::string>) {
+		CStringW kw(k.c_str());
+		return std::wstring((LPCWSTR)kw);
+	}
+	else if constexpr (std::is_integral_v<U>) {
+		return std::to_wstring(static_cast<long long>(k));
+	}
+	else {
+		static_assert(UcPstrAlwaysFalse<U>::value, "PTstr: unsupported type");
+	}
+}
+#endif
 
 /// Simple function to check a string 's' has at least 'n' characters
 inline bool HasMinLengthW(LPCWSTR s, size_t n)

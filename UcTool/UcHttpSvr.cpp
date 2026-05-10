@@ -70,22 +70,27 @@ int  UcHttpSvr::InitSvr(LPCWSTR sUri)
 			_httpSvr = hReqQueue;
 		}
 		else if (retCode == ERROR_ACCESS_DENIED)//5L
-		{	// 이미 소켓이 사용 되는 경우다. 관리자 모드로 VS를 실행 해보라.
-			throw_str(_T("ERROR_ACCESS_DENIED %u\r\n"), retCode);
+		{	// 관리자 모드로 VS를 실행 해보라. 방화벽이 안열린경우?
+			throw_err_str(ERROR_ACCESS_DENIED, _T("ERROR_ACCESS_DENIED %u on HttpAddUrl(%s): Excute with admin access right"), retCode, sUri);
 			//AfxMessageBox(_T("ERROR_ACCESS_DENIED. Excute with admin access right."));
-			//throw retCode;
+			/// ms-settings:developers 해서 개발자 모드 켜도 이거 떨어지네?
 		}
+		else if (retCode == ERROR_ALREADY_ASSIGNED)//5L
+		{	// 이미 소켓이 사용 되는 경우다. 
+			throw_err_str(ERROR_ALREADY_ASSIGNED, _T("ERROR_ALREADY_ASSIGNED %u HttpAddUrl(%s)"), retCode, sUri);
+		}
+		
 		else
 		{	// 이미 소켓이 사용 되는 경우다. 관리자 모드로 VS를 실행 해보라.
-			throw_str(_T("HttpAddUrl failed with %u\r\n"), retCode);
+			ULONG result = -1;
+			result = DoReceiveRequests(hReqQueue);// CloseHandle 해도 떨어 진다. ExitInstance
+			TRACE(_T("DoReceiveRequests failed with %u\r\n"), result);
+			retCode = result;//result
+			throw_str(_T("HttpAddUrl failed with %u"), retCode);
 			//AfxMessageBox(_T("HttpAddUrl Error!."));
 			//throw retCode;
 		}
 
-		ULONG result = -1;
-		result = DoReceiveRequests(hReqQueue);// CloseHandle 해도 떨어 진다. ExitInstance
-		TRACE(_T("DoReceiveRequests failed with %u\r\n"), result);
-		retCode = result;//result
 	}
 	catch (CException* e)
 	{

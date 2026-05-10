@@ -444,16 +444,27 @@ private:
 	std::function<void(LPCTSTR sMode, CString sErrorMsg)> _OnError;
 };
 
+#define DEFAULT_UTHREAD nullptr,__FILE__,__LINE__
+
 class UCTOOLDYNAMIC UcThread {
 public:
 	std::thread _th;
+	//int _error{ 0 };
+
+	/// PostMainTask를 불러라.
+	std::function<void(UcThread*)> _onThreadError;
+
+	CStringA _tag;
+	CStringA _sFile;
+	int _nLine{ 0 };
+
 	UcThread() {
 	}
 	template<typename Func>
-	UcThread(Func&& fn, LPCWSTR tag = nullptr) {
+	UcThread(Func&& fn, LPCSTR tag = nullptr, std::function<void(UcThread*)> onThError = nullptr, LPCSTR sFile = nullptr, int nLine = 0) {
 		// 람다(특히 중첩·mutable 캡처)를 그대로 std::thread에 넘기면 MSVC가 void(*)(void) 쪽으로
 		//std::function<void()> job = std::forward<Func>(fn);
-		SetFunction(fn);
+		StartThread(fn, tag, onThError, sFile, nLine);
 		//_th = std::thread([this, job = std::move(job), tag]() mutable {
 		//	try {
 		//		try {
@@ -467,9 +478,34 @@ public:
 		//	}
 		//	});
 	}
-	void SetFunction(std::function<void()> job, LPCWSTR tag = nullptr) {
+
+	void StartThread(std::function<void()> job, LPCSTR tag = nullptr, std::function<void(UcThread*)> onThError = nullptr, LPCSTR sFile = nullptr, int nLine = 0) {
+		if (tag)
+			_tag = tag;
 		ASSERT(!_th.joinable());
-		_th = std::thread([this, job = std::move(job), tag]() mutable {
+		if(onThError)
+			_onThreadError = onThError;
+		if (sFile)
+			_sFile = sFile;
+		if (nLine)
+			_nLine = nLine;
+		CStringA tagA = _tag;/// this 가 사라졌을 수도 있음. 필요한건 모두 캡쳐해서 넘겨야.
+		_th = std::thread([this, job = std::move(job), tagA]() mutable {
+#pragma region thread tag mapping
+			const DWORD tid = ::GetCurrentThreadId();
+			if (!tagA.IsEmpty()) {
+				UcThreadTag_Register(tid, tagA.GetString());
+			}
+			//struct UcThreadTag_Scope {
+			//	DWORD id{};
+			//	bool active{};
+			//	~UcThreadTag_Scope() {
+			//		if (active)
+			//			UcThreadTag_Unregister(id);
+			//	}
+			//} tagScope{ tid, !tagA.IsEmpty() };
+#pragma endregion thread tag mapping
+
 			try {
 				try {
 					job();//job = nullptr;   // 이 경우 mutable 이 필요
@@ -478,6 +514,8 @@ public:
 				///KException.s_fncExceptionDealer를 채워야 로그 처리가 된다.
 			}
 			catch (...) {
+				if (_onThreadError)
+					_onThreadError(this);
 				_break;
 			}
 			});
@@ -493,11 +531,12 @@ public:
 		//	}
 		//	});
 	}
+
+	//[[deprecated]]
 	template<typename Func>
 	UcThread& operator=(Func&& fn) {
-		SetFunction(fn);
-		//ASSERT(!_th.joinable());
-		//_th = std::thread(std::forward<Func>(fn));
+		ASSERT(0);//[[deprecated]]
+		StartThread(fn);
 		return *this;
 	}
 	bool joinable() const noexcept { return _th.joinable(); }

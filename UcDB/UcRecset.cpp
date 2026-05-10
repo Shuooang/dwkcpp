@@ -118,9 +118,9 @@ BOOL CUcRecset::Open()
 		m_lastError.Empty();
 		return TRUE;
 	}
-	catch (CDBException* e)
+	catch (CDBException* e)///ODBC connector 를 설치해야 한다.
 	{
-		m_lastError = e->m_strError;
+		m_lastError = e->m_strError;/// https://mariadb.com/downloads/connectors/connectors-data-access/odbc-connector/
 		DWKTRACE(L"DB Open Exception: %s (user: %s, server: %s, db: %s)", m_lastError.GetString(), m_uid.GetString(), m_server.GetString(), m_database.GetString());
 
 		// 만약 에러 문자열이 'Access denied for user ... (using password: YES)' 형태라면,
@@ -275,7 +275,7 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 				return {};
 			}
 			shRow5->Add(CStringW(textValue));
-			DWKTRACE(L"col:%v,row:%v %v", c, row, textValue);
+			DWKTRACE(L"[%v,%v] %v", row, c, textValue);
 		}
 		rows4.Add(NEWSHP(JVal, shRow5, false), false);
 		rs.MoveNext();

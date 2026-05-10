@@ -266,7 +266,7 @@ void UcMoveCtrl(CWnd * wparent, UINT idc, int cx, int cy)
 
 
 
-
+#ifdef _UseBaseClassInpokable_
 /// ////////////////////////////////////////////////////////////////////////////////////////
 /// ////////////////////////////////////////////////////////////////////////////////////////
 /// ////////////////////////////////////////////////////////////////////////////////////////
@@ -344,6 +344,7 @@ void CFormInvokable::OnTimer(UINT_PTR nIDEvent)//?LbTimer 5
 
 	CFormView::OnTimer(nIDEvent);
 }
+#endif // _UseBaseClassInpokable_
 
 #ifdef _DEBUG_example
 void CThreadCopy3View::OnSize(UINT nType, int cx, int cy)
@@ -359,6 +360,7 @@ void CThreadCopy3View::OnSize(UINT nType, int cx, int cy)
 	OnSizeAdjust(nType, cx, cy, artp);
 }
 #endif // _DEBUG_example
+
 BOOL CSizeAdjustable::OnSizeAdjust(UINT nType, int cx, int cy, vector<vector<int>> artp)
 {
 	CWnd* thsWnd = dynamic_cast<CWnd*>(this);
@@ -519,6 +521,19 @@ BOOL CSizeAdjustable::OnSizeAdjust(UINT nType, int cx, int cy, vector<vector<int
 	}
 	return TRUE;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+#ifdef _UseBaseClassInpokable_
 
 /// ////////////////////////////////////////////////////////////////////////////////////////
 /// ////////////////////////////////////////////////////////////////////////////////////////
@@ -704,7 +719,7 @@ LRESULT CDlgExInvokable::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 	return lResult;
 }
 
-//#endif
+#endif // _UseBaseClassInpokable_
 
 
 /// 특히 백그라운드에서 이미지 다운로드 하기 직전 이것으로 시작 한다.
@@ -837,7 +852,7 @@ void KLongTaskDoing::SafeDownloading(string key)
 	}
 }
 
-
+#ifdef _UseBaseClassInpokable_
 #ifdef _UseOnWndMsg
 #ifdef _DEBUG
 BOOL CDlgInvokable::OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT * pResult)
@@ -940,6 +955,7 @@ OWNDMSG(CMDIFrameWnd, CMDIFrameWndInvokable);
 OWNDMSG(CWnd, CWndInvokable);
 
 #endif // _DEBUG
+#endif // _UseBaseClassInpokable_
 
 #if CPP_BEFORE_17
 // UcWndInvokable.h의 INLINE_STATIC 멤버들 정의
@@ -947,3 +963,136 @@ CUcCriticalSection CPostMainTaskHelper::s_csGarbage;
 KPtrList<CPostMainTaskHelper::LambdaData>* CPostMainTaskHelper::s_pGarbageList = nullptr;
 WORD CPostMainTaskHelper::s_srl = 0;
 #endif
+
+#ifndef REMIND_PostMainTask_
+#define REMIND_PostMainTask_
+DWKREMINDER("여기 PostMainTaskSelf 관련 샘플")
+#endif
+
+#ifdef _Usage_PostMainTask_LambdaTimer
+/// 사용법: C:\Dropbox\Proj\CmnJ\UcTool\UcWndInvokable.h  UcTool은 링크
+***********************************************************************
+1. 헤더 파일에 #include "UcWndInvokable.h" 추가
+#include "UcTool/UcWndInvokable.h"
+
+2 - A.WindowProc을 override하지 않은 경우 :
+class CMyDialog : public CDialog
+{
+public:
+	/// 이걸 해줌 으로써 WindowProc에서 WM_USER_INVOKE 메시지를 받을수 있게 됩니다. 
+	/// 1. PostMainTaskSelf([this]() { ... }); 를 이용할 수 있게 됩니다.
+	/// 
+	/// 이걸 해줌 으로써 WindowProc에서 WM_TIMER 메시지를 받을수 있게 됩니다. 
+	/// 2. SetTimerLambda(HWND...) 를 이용할 수 있게 됩니다.
+	OVERRIDE_WINDOWPROC_FOR_ALL(CDialog)  // 매크로 한 줄로 추가!
+
+		void DoWork()
+	{
+		// 함수 사용 (디버깅 가능)
+		PostMainTaskSelfSimple([this]() {
+			SetDlgItemText(IDC_STATUS, L"작업 완료!");
+			});
+
+		// 또는 매크로 사용 (디버깅 어려움)
+		// POST_MAIN_TASK_SELF([this]() {
+		//     SetDlgItemText(IDC_STATUS, L"작업 완료!");
+		// });
+	}
+};
+
+2 - B.이미 WindowProc을 override하고 있는 경우 :
+class CMyDialog : public CDialog
+{
+public:
+	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override
+	{
+		ADD_POSTMAINTASK_TO_WINDOWPROC();  /// 기존 코드에 한 줄만 추가!
+		// 기존 메시지 처리 코드들...
+		switch (message)
+		{
+		case WM_CREATE:	// 기존 처리
+			break;
+		case WM_DESTROY:// 기존 처리
+			break;
+		}
+		return CDialog::WindowProc(message, wParam, lParam);
+	}
+};
+
+3. 사용 예제 : 사용법
+// CWnd 계열 클래스에서 사용 (this 자동)
+PostMainTaskSelf([this](auto) {
+	SetDlgItemText(IDC_STATUS, L"작업 완료!");
+	});
+// 일반 클래스에서 사용 (원하는 윈도우 선택)
+PostMainTaskSelf(AfxGetMainWnd(), [this]() {
+	// 메인 윈도우에 PostMessage
+	});
+PostMainTaskSelf(m_pDialog, [this](auto) {
+	// 특정 다이얼로그에 PostMessage
+	});
+
+// 복잡한 람다 (디버깅 필요시)
+PostMainTaskSelf([this](auto) {
+	// 복잡한 로직...
+	SetDlgItemText(IDC_STATUS, L"작업 완료!");
+	});
+
+// 동기 실행 : 리턴값이 필요한 경우
+LRESULT result = SendMainTaskSelf([this](auto) -> LRESULT {
+	return MessageBox(L"계속하시겠습니까?", L"확인", MB_YESNO);
+	});
+
+/// 매크로 사용도 가능하지만 디버깅이 어려움
+// POST_MAIN_TASK_SELF([this]() { ... });
+// SEND_MAIN_TASK_SELF([this]() -> LRESULT { ... });
+
+최소한의 추가 코드 :
+-CMainFrame에만 : OVERRIDE_WINDOWPROC_FOR_ALL(CFrameWnd) 매크로 한 줄
+- CMainFrame에 하면, 다른 모든 클래스에서 WindowProc override 할필요 없다.
+
+사용법 :
+	///	PostMainTask: 
+	PostMainTaskSelf(AfxGetMainWnd(), [this]() { ... });
+/// LambdaTimer (권장): 타이머처리 윈도우는 MainFrame에서 한다.
+
+#ifdef _TimerSamples_ //dwk: 2026-04-20 17:38 
+class KLambdaTimer;// foward declaration
+
+SHP<KLambdaTimer> _timer;//멤버 pointer 선언
+
+_timer = make_shared<KLambdaTimer>(this);//이건 윈도우 초기 단계에서 OnCreate, OnInitDialog 같은데서 만들어 진다고 가정.
+
+_timer->SetTimerLambda("_progr", 250, [&](auto) {
+	// do something repeatedly every 250ms
+	});
+
+_timer->DelayAndRunOnce(__FUNCTION__, 10_sec,
+	[this, sFileOnly, sAction, sExt](auto) {
+		SomeAutoCommitAtBuildDelay(sFileOnly, sAction, sExt);
+	});
+#endif // _TimerSamples_
+
+//SetTimerLambda(AfxGetMainWnd(), "test", 1000, [this](auto) { ... });
+///// LambdaTimer (편의): 
+//SetTimerLambda("test", 1000, [this](auto) { ... });
+///// LambdaTimer (기존): KLambdaTimer timer(AfxGetMainWnd()); timer.SetTimerLambda("test", 1000, [this](auto) { ... });
+///// 특정 윈도우: 
+//	PostMainTaskSelf(m_pDialog, [this](auto) { ... });
+///// HWND 직접: 
+//	PostMainTask(hwnd, [this](auto) { ... });
+
+장점:
+-CFormInvokable, CDlgInvokable 등 특별한 클래스 상속 불필요 : [[deprecated]]
+- 메인 윈도우에만 한 번만 설정하면 어디서든 사용 가능
+- PostMainTask와 LambdaTimer 모두 지원
+- 원하는 윈도우를 선택해서 PostMessage 가능
+- 기존 PostMainTask와 동일한 사용법
+- 자동 메모리 관리(메모리 누수 방지)
+- 스레드 안전
+- 디버깅 지원(함수 사용 시)
+
+기존 방식과 비교 :
+기존: class CMyDialog : public CDlgInvokable  // 각 클래스마다 상속 필요
+새로운 : CMainFrame에만 한 번 설정 → 어디서든 PostMainTaskSelf(AfxGetMainWnd(), ...) 사용!
+#endif // _Usage_PostMainTask_LambdaTimer

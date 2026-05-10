@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "framework.h"
 #include <sstream>
+#include <mutex>
 #include <regex> // for std::wregex
 
 #include <PathCch.h>//PathCchCanonicalize
@@ -1274,13 +1275,11 @@ long UcWriteSmallTextFileW(LPCWSTR filename, CStringW& text)
 #define ERRSTR(err) s_mapErr->insert(std::pair<UINT, std::string>(err, #err))
 
 shared_ptr<std::map<UINT, std::string>> s_mapErr;
+static std::once_flag s_mapErrOnce;
+
 std::shared_ptr<std::map<UINT, std::string>> UcGetErrorMap() {
-	// std::make_shared를 사용하여 std::map을 생성하고 초기화합니다.
-	if (!s_mapErr)
+	std::call_once(s_mapErrOnce, []() {
 		s_mapErr = make_shared<std::map<UINT, std::string>>();
-	//return std::make_shared<std::map<UINT, std::string>>(std::initializer_list<std::pair<const UINT, std::string>>{
-	if (s_mapErr->size() == 0)
-	{
 		//s_mapErr->insert(std::pair());
 //		s_mapErr->insert(std::pair<UINT, std::string>(ERROR_SUCCESS, "ERROR_SUCCESS"));
 
@@ -4455,10 +4454,13 @@ std::shared_ptr<std::map<UINT, std::string>> UcGetErrorMap() {
 		ERRSTR(ERROR_WINHTTP_GLOBAL_CALLBACK_FAILED);// (12191)
 		ERRSTR(ERROR_WINHTTP_FEATURE_DISABLED);// (12192)
 #endif
-	}
+	});
 	return s_mapErr;
 }
-
+/// 별도로 UcErrorToStr에 뮤텍스를 둘 필요는 없습니다. 말씀하신 것처럼 문제는 “초기 한 번 채우는 구간”이었습니다.
+//맵은 더 이상 insert 하지 않고, UcErrorToStr에서는 find 같은 읽기만 합니다. 쓰기 스레드가 없으면 여러 스레드에서 동시에 const 관찰(find 등)해도 std::map 사용상 문제 없습니다.
+//맵이 완전히 채워진 뒤에야 다른 스레드가 call_once를 빠져나와 find를 하게 되므로, “반쯤 채워진 맵을 읽는다” 같은 상태는 나오지 않습니다.
+//정리하면, UcErrorToStr만 따로 잠글 필요는 없고, 지금처럼 UcGetErrorMap 초기화를 call_once로 직렬화한 것으로 충분합니다.
 CStringA UcErrorToStr(UINT err = 0xffffffff);
 CStringA UcErrorToStr(UINT err)
 {

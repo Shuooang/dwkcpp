@@ -22,10 +22,69 @@ DWKREMINDER("Put GetMapStack() to EXE or DLL Project.")
 _PUT_THIS_TO_DLL_OR_EXE_
 #endif // UCTOOL_EXPORTS
 
+#pragma region thread tag mapping
+#ifdef _DWKTRACE_TRUE
+namespace {
+std::mutex g_ucThreadTagMtx;
+std::unordered_map<DWORD, std::wstring> g_ucThreadTagMap;
+}
+#endif
+
+void UcThreadTag_Register(DWORD threadId, LPCSTR tag)
+{
+#ifdef _DWKTRACE_TRUE
+	if (!tag || !tag[0])
+		return;
+	std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
+	g_ucThreadTagMap[threadId] = CStringW(tag).GetString();
+#else
+	(void)threadId;
+	(void)tag;
+#endif
+}
+
+void UcThreadTag_Unregister(DWORD threadId)
+{
+#ifdef _DWKTRACE_TRUE
+	std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
+	g_ucThreadTagMap.erase(threadId);
+#else
+	(void)threadId;
+#endif
+}
+
+#ifdef _DWKTRACE_TRUE
+CStringW UcThreadTag_FormatFixed(DWORD threadId)
+{
+	std::wstring raw;
+	{
+		std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
+		const auto it = g_ucThreadTagMap.find(threadId);
+		if (it != g_ucThreadTagMap.end())
+			raw = it->second;
+	}
+	CStringW sraw(raw.c_str());
+	const int w = UcThreadTag_kTraceColWidth;
+	if (sraw.GetLength() > w)
+		sraw = sraw.Left(w);
+	//return sraw;
+	CStringW out;
+	//out.Format(L"%-*s", w, sraw.GetString());
+	// 오른쪽 정렬을 위해서 '-'(왼쪽 정렬) 대신 아무 플래그도 없는 %*s 포맷을 사용해야 하고, 
+	// 태그는 반드시 스레드 번호 "앞"에, 고정폭(동적X, 항상 UcThreadTag_kTraceColWidth만큼)으로 출력해야 합니다.
+	// 동적으로 하면 줄맞춤이 무너지므로, 아래와 같이 오른쪽 정렬(고정폭)로 바꿔야 한다.
+	if(sraw.GetLength() > 0){
+		out.Format(L"[%s]", sraw.GetString());
+		return out;
+	}
+	return {};
+}
+#endif
+#pragma endregion thread tag mapping
 #if CPP17_OR_LATER
 /// static 멤버 변수는 클래스 정의에서 선언만 하고, cpp 파일에서 정의해야 합니다. (초기화 포함)
 //std::shared_ptr<KTrace> KTrace::instance_;
-int KTrace::wHd_ = 100;
+int KTrace::wHd_ = 80;
 
 
 //UCTOOLDYNAMIC

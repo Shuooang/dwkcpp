@@ -12,6 +12,43 @@ class UcJTable;
 
 /// DSN/연결 문자열 구성, 연결·해제, SELECT 결과를 `UcJObj` 테이블 규약(`13.2`)으로 채우고,
 /// INSERT/UPDATE/DELETE/프로시저 등은 `type` 만 있는 블록으로 채운다.
+/// 사용법
+// class SshRecset : public CUcRecset
+//{
+//public:
+//	SshRecset();
+//};
+// 
+//SshRecset::SshRecset()
+//{
+//	SetDsn(L"NewNGS");
+//	SetUid(L"ngsadmin");//root");// 
+//	SetPwd(LR"(hkjl;')");
+//	SetServer(L"localhost");
+//	SetDatabase(L"ngsx");
+//	try {
+// 	BOOL	rb = Open();
+//	}
+//	catch (CDBException* e) {	}
+//	catch (...) {	}
+//}
+// 
+//bool CSshTool::GetSomeData() {
+//	SshRecset rs;
+//	if (SHP<UcJTable> tb = rs.QueryToTableJson(LR"(
+//		SELECT * FROM tSmtSomeTable")) {
+//		for (int r = 0; r < tb->RowSize(); ++r) {
+//			ShJBase robj = tb->RowObj(r);
+//			if (robj->IsDic()) {
+//				auto row = robj->Dic();
+//				auto fKey = row->I("fKey");
+//				_mapSome[fKey] = robj;
+//			}
+//		}
+//		return true;
+//	}
+//	return false;
+//}
 class UCDBDYNAMIC CUcRecset
 {
 public:

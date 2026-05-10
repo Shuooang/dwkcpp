@@ -616,6 +616,11 @@ public:
 	/// };
 };
 
+#pragma region thread tag mapping
+/// UcThread 생성 시 넘긴 tag를 DWK Trace 한 줄에서 스레드 ID 앞 고정폭 열로 쓴다 (UcDebug.cpp).
+UCTOOLDYNAMIC void UcThreadTag_Register(DWORD threadId, LPCSTR tag);
+UCTOOLDYNAMIC void UcThreadTag_Unregister(DWORD threadId);
+#pragma endregion thread tag mapping
 
 /// <summary>
 /// thread에 따라 스택 레벨과 함수명을 증/감 시키는 장치
@@ -1155,7 +1160,10 @@ public:
 
 #ifdef _DWKTRACE_TRUE // DWKSetThread DwkThreadName OutputDwkDebugString
 //#if (defined(_DEBUG) || defined(DwkReleaseDump)) && (!defined(NoDwkTrace))
-
+#pragma region thread tag mapping
+enum : int { UcThreadTag_kTraceColWidth = 20 };
+UCTOOLDYNAMIC CStringW UcThreadTag_FormatFixed(DWORD threadId);
+#pragma endregion thread tag mapping
 inline CStringW KTrace::KFormat(LPCWSTR fmt, ...)
 {
 	CStringW sFmt;
@@ -1235,6 +1243,7 @@ inline void DwkSetThread(const string & func) {
 
 /// <summary>
 /// 함수 안에서, 현재 스레드의 스택 만큼 마진을 주고 TRACE처럼 툴력 한다. KTrace::Instance()->Trace
+/// UcThread(tag) 등록 시 스레드 ID 앞 UcThreadTag_kTraceColWidth 고정폭 열에 표시.
 /// </summary>
 /// <param name="sMsg"></param>
 inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWSTR pFunc, void* pDummy)
@@ -1286,7 +1295,8 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 		bool isLast = (info.lastTick != 0);
 		bool isFast = ((now - info.lastTick) <= 5000ULL);
 		bool isFastSeq = isSameFunc && isLast && isFast;
-		const int nMaxRepeat_ = 10;
+		const int nMaxRepeat_ = 50;
+		isFastSeq = false;/// 일단 이 기능을 막자
 		if (isFastSeq) {
 			// 같은 스레드, 같은 대표 함수가 5초 안에 다시 들어온 경우
 			info.lastTick = now;
@@ -1296,11 +1306,9 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 				// nMaxRepeat_번째 이상부터는 디테일 출력 대신 '.'만 찍는다.
 				info.squashing = true;
 				lk.unlock();
-				// 너무 많이 찍히면 우측으로 길어지니, 100개마다 줄바꿈을 넣어 준다.
-				if ((info.count - nMaxRepeat_) % 100 == 0)
-					ktr->OutputDwkDebugString(L".\n", true);
-				else
-					ktr->OutputDwkDebugString(L".", true);
+				// "`"만 출력하면 다음 OutputDebugString(예: 다른 DWKTRACE 한 줄)과 같은 줄로 붙어
+				// "`C:\path..."처럼 보인다(OnPaint 폭주 등). 매번 CRLF로 끊는다.
+				ktr->OutputDwkDebugString(L"`\r\n", true);
 				return {};
 			}
 			// 1~nMaxRepeat_번째까지는 그냥 아래 원래 Trace 로직을 타게 둔다.
@@ -1308,12 +1316,23 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 		else {
 			// 이전에 다른 함수이거나(또는 같은 함수라도 5초 넘게 쉬었다가) 들어온 경우
 			// 직전 묶음이 "압축 모드" 였다면 요약 한 줄을 먼저 출력해 준다.
+			bool didSummary = false;
 			if (!info.funcName.IsEmpty() && info.squashing && info.count > nMaxRepeat_) {
 				CStringW sum;
-				sum.Format(L"[FAST] %s : %d회 반복 (≤5초 간격)\n",
+				sum.Format(L"[FAST] %s : %d회 반복 (≤5초 간격)\r\n",
 					info.funcName.GetString(), info.count);
 				lk.unlock();
 				ktr->OutputDwkDebugString(sum, true);
+				lk.lock();
+				didSummary = true;
+			}
+
+			// 압축 모드가 백틱만 찍고 끝난 경우 마지막 "`" 뒤에 개행이 없어
+			// 다음 일반 Trace(경로 등)가 "`C:\..." 처럼 붙을 수 있음.
+			// 요약 줄을 쓴 경우는 이미 \r\n로 끊겼으므로 중복 개행은 하지 않는다.
+			if (info.squashing && info.count > nMaxRepeat_ && !didSummary) {
+				lk.unlock();
+				ktr->OutputDwkDebugString(L"\r\n", true);
 				lk.lock();
 			}
 
@@ -1400,9 +1419,18 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 			}
 		}
 	}
-	ffmt.Format(L"%%-%ds %%s %%5X:%%c%%s%%s", KTrace::wHd_);
-	fmt2.Format((PWS)ffmt, fmt1, stm, idThrd, bFG ? L'F' : L'B', /*iThrd,*/ sTab.str().c_str(), btn);
+	#pragma region thread tag mapping
+	CStringW sThTag = UcThreadTag_FormatFixed(idThrd);
+	// INSERT_YOUR_CODE
+	// sThTag의 길이 만큼 KTrace::wHd_에서 빼도록 동적으로 조정
+	int effectiveWidth = KTrace::wHd_ - sThTag.GetLength();
+	if (effectiveWidth < 0) 
+		effectiveWidth = 0; // 음수 방지
+	ffmt.Format(L"%%-%ds %%s %%s%%5X:%%c%%s%%s", effectiveWidth);
+	//ffmt.Format(L"%%-%ds %%s %%s %%5X:%%c%%s%%s", KTrace::wHd_);//%-66s %s %s%5X:%c%s%s
+	fmt2.Format((PWS)ffmt, fmt1, stm, sThTag, idThrd, bFG ? L'F' : L'B', sTab.str().c_str(), btn);//C:\Prj\NewNGS\NgsServer\NgsServer\SshTool.cpp(375):info-            ::WSAPoll(  2158:B  !  .  -
 	//fmt2.Format(L"%-100s %s %5X:%c%s%s", fmt1, stm, idThrd, bFG ? L'F' : L'B', sTab.str().c_str(), btn);
+	#pragma endregion thread tag mapping
 
 	CStringW fmt;
 	if (bFunc)

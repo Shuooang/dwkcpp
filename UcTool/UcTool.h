@@ -1121,14 +1121,15 @@ public:
 //#define throw_common throw _ke// 결국 두번 나오니 여기서 하는건 뺀다.
 
 //GetLastError() 값을 직접 줄때
-#define throwLINE                                  {auto _ke = new KException("throwLINE",    0, 0,           (PWS)NULL, (PWS)NULL, __FUNCTIONW__, __LINE__, __FILE__, NULL, 0); throw _ke; }
-#define throw_err(errn)                            {auto _ke = new KException("throw_gen", errn, 0, UcErrorToStrW(errn), (PWS)NULL, __FUNCTIONW__, __LINE__, __FILE__, NULL, 0); throw _ke; }
+#define    throwLINE                               {auto _ke = new KException("throwLINE",    0, 0,           (PWS)NULL, (PWS)NULL, __FUNCTIONW__, __LINE__, __FILE__, NULL, 0); throw _ke; }
+#define    throw_err(errn)                         {auto _ke = new KException("throw_gen", errn, 0, UcErrorToStrW(errn), (PWS)NULL, __FUNCTIONW__, __LINE__, __FILE__, NULL, 0); throw _ke; }
 #define    throw_gen(errn, s)                      {auto _ke = new KException("throw_gen", errn, 0, (PWS)NULL          , (PWS)s   , __FUNCTIONW__, __LINE__, __FILE__, NULL, 0); throw _ke; }
 #define no_throw_gen(errn, s)                      {           KException _ke(NULL       , errn, 0, (PWS)NULL          , (PWS)s   , __FUNCTIONW__, __LINE__, __FILE__, NULL, KException::eNotError);}
 #define no_throw_genFL(errn, s, fname, line, file) {           KException _ke(NULL       , errn, 0, (PWS)NULL          , (PWS)s   , fname        , line    , file    , NULL, KException::eNotError);}
 
 /// 주의: 매크로 함수 가로는 매크로명에 바짝 붙여야 한다. C7515 에러를 피하기 위해
 #define     throw_str(fmt, ...)                    {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); throw_gen(GetLastError(), VAL_LINE(s, __LINE__));}
+#define     throw_err_str(err, fmt, ...)                {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); throw_gen(err, VAL_LINE(s, __LINE__));}
 
 /// `throw_if_false` 실패 직전에만 호출된다.
 /// `__debugbreak()` 는 디버거 미부착 시 부작용이 있어 쓰지 않는다.
@@ -1157,9 +1158,10 @@ inline void UcThrowIfFalseFailedHook() noexcept
 	} while (0)
 
 /// no_throw계열은 throw는 하지 않고, 그냥 출력 또는 기록만 하게 하는 것이다.
-#define  no_throw_str(fmt, ...)                    {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_gen(0, VAL_LINE(s, __LINE__));}
-#define no_throw_str1(fmt)                         {CStringW VAL_LINE(s, __LINE__)(fmt); no_throw_gen(0, VAL_LINE(s, __LINE__));}
-#define no_throw_strFL(fname, line, file, fmt, ...){CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_genFL(GetLastError(), VAL_LINE(s, __LINE__), fname, line, file);}
+#define no_throw_str(fmt, ...)                      {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_gen(0, VAL_LINE(s, __LINE__));}
+#define no_throw_err_str(err, fmt, ...)             {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_gen(err, VAL_LINE(s, __LINE__));}
+#define no_throw_str1(fmt)                          {CStringW VAL_LINE(s, __LINE__)(fmt); no_throw_gen(0, VAL_LINE(s, __LINE__));}
+#define no_throw_strFL(fname, line, file, fmt, ...) {CStringW VAL_LINE(s, __LINE__)(DwkFormat(fmt, ##__VA_ARGS__)); no_throw_genFL(GetLastError(), VAL_LINE(s, __LINE__), fname, line, file);}
 
 /// <summary>
 /// `현재파일(라인):somestr- `와 뒤에 문자열 까지 만들어 그 문자열을 리턴 한다.

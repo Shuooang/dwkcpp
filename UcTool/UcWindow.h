@@ -603,5 +603,6 @@ struct MyMonitorEnumContext {
 };
 std::shared_ptr<MyMonitorEnumContext> UcGetMonitorInfo();
 
-void UcMoveWindowToMonitor(CWnd* pWnd, const MONITORINFOEX& mi);
+UCTOOLDYNAMIC void UcMoveWindowToMonitor(CWnd* pWnd, const MONITORINFOEX& mi);
+
 

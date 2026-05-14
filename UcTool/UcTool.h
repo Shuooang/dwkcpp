@@ -598,6 +598,7 @@ void UcCutByToken(const TCH* psSrc, const TCH* seps, CArray<CString, LPCTSTR>& a
 }
 
 
+UCTOOLDYNAMIC
 CString UcGetFormattedGuid(bool bHipn = true);
 //CStringA UcGetFormattedGuidA(bool bHipn = true);
 
@@ -3288,6 +3289,46 @@ inline CRuntimeClass* GetRTClass(TCL* th)
 
 #pragma endregion ]CATCH
 
+
+#include <string_view>
+#include <cstring>
+#include <cwchar>
+#include <afxstr.h>   // CStringA / CStringW
+
+template <class T>
+constexpr size_t UcLength(const T & s)
+{
+	using U = std::decay_t<T>;
+
+	if constexpr (
+		std::is_same_v<U, std::string> || 
+		std::is_same_v<U, std::wstring>)
+		return s.length();
+	else if constexpr (
+		std::is_same_v<U, std::string_view> || 
+		std::is_same_v<U, std::wstring_view>)
+		return s.length();
+	else if constexpr (
+		std::is_same_v<U, CStringA> || 
+		std::is_same_v<U, CStringW>)
+		return static_cast<size_t>(s.GetLength());
+	else if constexpr (
+		std::is_same_v<U, const char*> || 
+		std::is_same_v<U, char*>)
+		return s ? std::strlen(s) : 0;
+	else if constexpr (
+		std::is_same_v<U, const wchar_t*> || 
+		std::is_same_v<U, wchar_t*>)
+		return s ? std::wcslen(s) : 0;
+	else if constexpr (
+		std::is_base_of_v<std::stringstream, U> ||
+		std::is_base_of_v<std::wstringstream, U> ||
+		std::is_base_of_v<std::ostringstream, U> ||
+		std::is_base_of_v<std::wostringstream, U>)
+		return s.str().length();
+	else
+		static_assert(sizeof(U) == 0, "Unsupported string type");
+}
 
 //extern std::map<std::wstring, function<void* ()>> _mapFactory;//이거 싱글톤으로 해야 하고
 //inline void UcSetupFactory(std::wstring sClassName, function<void* ()> fncCreate) {

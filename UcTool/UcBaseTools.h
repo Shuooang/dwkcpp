@@ -685,6 +685,7 @@ public:
 	KDefer(std::function<void(void)> fnc) { _fnc = fnc; }
 	~KDefer() { if (_fnc) _fnc(); }
 	void Abort() { _fnc = nullptr; }
+	void DoNow() { if (_fnc) { _fnc(); _fnc = nullptr; } }
 };
 
 //dwk: 2025-04-18 11:20  
@@ -2699,7 +2700,7 @@ template<typename>
 struct UcPstrAlwaysFalse : std::false_type {};
 
 template<typename T>
-inline std::wstring PTstr(T&& k)
+inline std::wstring DyneStr(T&& k)
 {
 	using U = std::decay_t<T>;
 

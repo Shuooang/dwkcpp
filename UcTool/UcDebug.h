@@ -1346,9 +1346,24 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 	}
 #pragma endregion	//] ---- 대표 함수 빠른 반복 처리 끝 ----
 
-	auto iDwk = sMsg.Find(L"dwk");
+	//auto iDwk = sMsg.Find(L"dwk");
+	CStringW kTrace(L"info");// 디폴트 태그.  = iDwk >= 0 ? L"dwk" : L"info";
+	CStringW sMsg1 = sMsg;
+	
+	vector<CStringW> tags = { L"dwk", L"sql", L"pkt", L"hold"};// L"REMINDER" 
+	auto fnctag = [&kTrace, &sMsg, &sMsg1](const CStringW& tag) -> bool {
+		if (sMsg.Find(tag + L":") == 0) {
+			kTrace = tag;
+			sMsg1 = sMsg1.Mid(kTrace.GetLength() + 1);
+			return true;
+		}
+		return false;
+	};
+	for (const auto& tag : tags)
+		if (fnctag(tag))
+			break;
+
 	CStringW fmt1;
-	CStringW kTrace = iDwk >= 0 ? L"dwk" : L"info";
 	fmt1.Format(L"%s(%d):%s-", sFile, nLine, (PWS)kTrace);
 	//"{fullpath}(line):-" 딱 이 규칙만 지키면 더블클릭할 때 소스로 간다.
 	int nStack = 0;
@@ -1434,9 +1449,9 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 
 	CStringW fmt;
 	if (bFunc)
-		fmt.Format(L"%s %s # %s\n", fmt2.GetString(), sFunc.GetString(), sMsg.GetString());
+		fmt.Format(L"%s %s # %s\n", fmt2.GetString(), sFunc.GetString(), sMsg1.GetString());
 	else
-		fmt.Format(L"%s %s\n", fmt2.GetString(), sMsg.GetString());
+		fmt.Format(L"%s %s\n", fmt2.GetString(), sMsg1.GetString());
 
 	auto tik = GetTickCount64();
 	auto elap = tik - _lastTik;

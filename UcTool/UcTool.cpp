@@ -223,6 +223,7 @@ int UcGetFormattedGuid(GUID& guid, CString& rString, bool bHipn)
 //	rString = CStringA(rStringW);
 //	return rv;
 //}
+UCTOOLDYNAMIC
 CString UcGetFormattedGuid(bool bHipn)//=true
 {
 	GUID guid;

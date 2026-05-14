@@ -110,7 +110,7 @@ BOOL CUcRecset::Open()
 	//---------------------------
 	//Server Information: MariaDB 12.02.000002
 
-	DWKTRACE(L"conn: %s", conn.GetString());
+	DWKTRACE(L"sql:%s", conn.GetString());
 	BOOL rb{ FALSE };
 	try
 	{
@@ -143,12 +143,143 @@ void CUcRecset::Close()
 		m_db.Close();
 }
 
+//----------------------------------------------------------------------
+// SELECT 절의 필드명을 추출한다.
+// - alias.fName
+// - fName
+// - alias.fName AS xxx
+// - alias.fName xxx
+// 모두 지원
+//
+// 규칙:
+//   실제 DB 필드명은 반드시 'f' 로 시작해야 한다.
+//   아니면 ASSERT(0)
+//
+// 예:
+//   SELECT a.fName, b.fAge AS Age, COUNT(*) cnt
+//   -> fName, fAge
+//
+// 주의:
+//   함수/COUNT(*)/CASE 등은 무시한다.
+//----------------------------------------------------------------------
+
+#include <regex>
+#include <set>
+inline std::vector<CStringW> ExtractAllFieldsFromSql(const CStringW& sql)
+{
+	std::vector<CStringW> fields;
+	std::set<CStringW> uniqueSet;
+
+	CStringW work;
+	work.Preallocate(sql.GetLength());
+	bool inString = false;
+
+	for (int i = 0; i < sql.GetLength(); ++i)
+	{
+		const wchar_t ch = sql[i];
+		if (ch == L'\''){
+			inString = !inString;
+			work += L' ';
+			continue;
+		}
+		work += inString ? L' ' : ch;
+	}
+
+	std::wregex re(LR"((?:\b[A-Za-z_][A-Za-z0-9_]*\s*\.\s*)?(f[A-Za-z0-9_]+))");
+	// 일부러 icase 안 씀. FROM 잡히면 안 됨.
+
+	const wchar_t* first = work.GetString();
+	const wchar_t* last = first + work.GetLength();
+
+	std::wcregex_iterator it(first, last, re);
+	std::wcregex_iterator end;
+
+	for (; it != end; ++it)
+	{
+		CStringW fld = (*it)[1].str().c_str();
+		fld.Trim();
+		if (fld.IsEmpty())
+			continue;
+		if (fld[0] != L'f'){
+			ASSERT(0);
+			continue;
+		}
+		if (uniqueSet.insert(fld).second){
+			fields.push_back(fld);
+			//UcJObj::FieldCheckAgainstLoadedSqlBackupFields(fld);
+		}
+	}
+	return fields;
+}
 
 SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, UcJObj& outRoot1)
 {
 	DWKFUNC;
 	CStringW sql(psql);
 	sql.Trim();
+#ifdef _DEBUG
+	std::vector<CStringW> selectFields = ExtractAllFieldsFromSql(sql);
+	for (auto& fld : selectFields) {
+		// CUcRecset이 UcJObj::FieldCheckAgainstLoadedSqlBackupFields 를 호출할 수 있다고 가정
+		jstring jfld(fld.GetString());
+		UcJObj::FieldCheckAgainstLoadedSqlBackupFields(jfld); // 외부 static 또는 글로벌 함수여야 함
+	}
+#endif // _DEBUG
+
+#ifdef _DEBUGx
+	// 쿼리문에서 select된 필드명 추출 (단순 파싱, 서브쿼리/함수 호출 등 복잡한 경우는 제한됨)
+	{
+		CStringW upperSql = sql;
+		upperSql.MakeLower(); // 소문자로 통일 (키워드 감지 목적)
+
+		int selectPos = upperSql.Find(L"select");
+		int fromPos = upperSql.Find(L"from");
+		
+		if (selectPos >= 0 && fromPos > selectPos) {
+			CStringW fieldStr = sql.Mid(selectPos + 6, fromPos - (selectPos + 6));
+			// 콤마(,)로 필드 분리, 트림 작업
+			std::vector<CStringW> selectFields;
+			int cur = 0;
+			while (true) {
+				int commaPos = fieldStr.Find(L',', cur);
+				CStringW one;
+				if (commaPos < 0) {
+					one = fieldStr.Mid(cur);
+				} else {
+					one = fieldStr.Mid(cur, commaPos - cur);
+				}
+				one.Trim();
+				if (!one.IsEmpty()) {
+					// alias가 있을 경우 공백 뒤에 별칭이 올 수 있음: "name as username"
+					int asPos = one.Find(L" as ");
+					if (asPos >= 0) {
+						one = one.Mid(asPos + 4);
+						one.Trim();
+					} else {
+						// 끝 쪽 별칭 지원 (공백 기준, ex: "name username")
+						int lastSpace = one.ReverseFind(L' ');
+						if (lastSpace >= 0) {
+							CStringW possibleAlias = one.Mid(lastSpace + 1);
+							if (!possibleAlias.IsEmpty() && possibleAlias.CompareNoCase(L"asc") != 0 && possibleAlias.CompareNoCase(L"desc") != 0) {
+								one = possibleAlias;
+							}
+						}
+					}
+					selectFields.push_back(one);
+				}
+				if (commaPos < 0)
+					break;
+				cur = commaPos + 1;
+			}
+			// 모든 필드명에 대해 체크
+			for (auto& fld : selectFields) {
+				// CUcRecset이 UcJObj::FieldCheckAgainstLoadedSqlBackupFields 를 호출할 수 있다고 가정
+				jstring jfld(fld.GetString());
+				UcJObj::FieldCheckAgainstLoadedSqlBackupFields(jfld); // 외부 static 또는 글로벌 함수여야 함
+			}
+		}
+	}
+#endif
 
 	m_lastError.Empty();//|| !tableKey || !*tableKey
 	if (!sql || !*sql) {// NULL 또는 길이 0인 SQL 문자열 체크.
@@ -235,6 +366,10 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 				e->Delete();
 			}
 			catch(CException* e){
+			//SELECT a.fCidClientID, c.fIpAddress, c.fMacAddr, c.fPcName
+			//from tauthclient a 
+			//	join tclients c ON a.fCidClientID = c.fCidClientID
+			//		WHERE c.fIpAddress = '192.168.0.157' and c.fMacAddr = '0A-00-27-00-00-05'
 				_break;
 			}
 			catch(...){

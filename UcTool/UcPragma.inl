@@ -1,10 +1,11 @@
 ﻿#pragma once
 //#include "UcPragma.inl"
 #ifndef FILINDWK //이름 바꾸자.//dwk: 2025-07-15 11:33 
-#define FILINDWK(msg) __FILE__ "(" _CRT_STRINGIZE(__LINE__) "): dwk - " msg
+#define FILINDWK(msg) __FILE__ "(" _CRT_STRINGIZE(__LINE__) "): dwk- " msg
+#define FILINREMINDER(msg) __FILE__ "(" _CRT_STRINGIZE(__LINE__) "): REMINDER- " msg
 
 #define DWKBLD(msg)      __pragma(message(FILINDWK(msg)))
-#define DWKREMINDER(msg) __pragma(message(FILINDWK("REMINDER: "msg)))
+#define DWKREMINDER(msg) __pragma(message(FILINREMINDER(msg)))
 #define DWKWARN(msg)     __pragma(message(FILINDWK("warning: "msg)))
 #define DWKINFO(msg)     __pragma(message(FILINDWK("info: "msg)))
 //exold: 매크로없이 쓰려면: #pragma message(__FILE__ "(" _CRT_STRINGIZE(__LINE__) "): dwk - " "여기부터 메시지 이러쿵저러쿵.")

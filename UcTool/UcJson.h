@@ -327,9 +327,7 @@ public:
 		return operator()(key.c_str());
 	}
 
-	JUnit operator()(int key) {
-		return operator()(PTstr(key));
-	}
+	JUnit operator()(int key);
 };
 
 
@@ -453,6 +451,8 @@ public:
 	ShJBase RowObj(size_t row);
 };
 
+/// 함수도 foward declaration로 선언해 놓고,그래야 UcJObj에서 쓸 수 있다.
+template<typename T> std::wstring PTstr(T&& k);
 
 
 //#ifdef _UnsortedHash_
@@ -465,6 +465,13 @@ public:
 class UCTOOLDYNAMIC UcJObj : public KStdMap<jstring, ShJVal>, public JBase
 {
 public:
+	static std::function<BOOL(jstring& k)> _fncFieldCheck;
+	static BOOL s_bSkipFieldCheck;
+#ifdef _DEBUG
+	static bool LoadSqlBackupFieldNames(LPCWSTR pathToSqlFile);
+	static BOOL FieldCheckAgainstLoadedSqlBackupFields(jstring& k);
+#endif
+
 	struct InitItem {
 		jstring key;
 		ShJVal val;
@@ -543,34 +550,23 @@ public:
 	/// just for DEBUG. see Txt for release
 	void toString();
 
-	function<BOOL(jstring& k)> _fncFieldCheck;
-	inline static BOOL s_bSkipFieldCheck; // {FALSE};
 	//export된 static변수도 
 
 	template <typename TKEY>
 	void Set(TKEY k, ShJVal val)
 	{
 		BOOL bOK = TRUE;
+		jstring kw = PTstr(k);//(k);
 #ifdef _DEBUG //필드체크
-		if (this->Has(k))
-			_break;//디버그 용도//dwk: 2025-11-14 10:55 ~CSaveLoad 에서 상위 노드에 넣고, 또 넣는지 보려고
+		//if (this->Has(k))
+		//	_break;//디버그 용도//dwk: 2025-11-14 10:55 ~CSaveLoad 에서 상위 노드에 넣고, 또 넣는지 보려고
 		ASSERT(val->IsVal());///JVal로 싸서 줘야지. SHP<UcJObj> 를 바로 오면 안됨.
-		if (!s_bSkipFieldCheck && _fncFieldCheck)
-		{
-			/// 여기 k는 이미 PTStr을 거치면서 Trim 이 되었으므로 여기서는 안해도 된다.
-			jstring kw = PTstr(k);//(k);
-			bOK = _fncFieldCheck(kw);
-		}
+		//if (!s_bSkipFieldCheck && _fncFieldCheck)
+		//	bOK = _fncFieldCheck(kw);
 #endif // _DEBUG
-		if (bOK)
-		{
-			SetAt(PTstr(k), val);
-#ifdef _DEBUGx
-			toString();
-#endif // _DEBUGx
-		}
+		//if (bOK)
+			SetAt(kw, val);
 	}
-
 	/// Format은 Set과 같은 역할을 하지만, val이 공유되는 것이 아니라 복사된다.
 	template <typename TKEY>
 	void Format(TKEY k, LPCWSTR fmt, ...)
@@ -724,7 +720,7 @@ public:
 	{
 		BOOL bOK = TRUE;
 #ifdef _DEBUG //필드체크 Lookup
-		if (!s_bSkipFieldCheck && _fncFieldCheck)
+		if (!UcJObj::s_bSkipFieldCheck && _fncFieldCheck)
 		{
 			//JString kw(k);
 			bOK = _fncFieldCheck(k);
@@ -1444,10 +1440,23 @@ public:
 #endif
 };
 
+#if CPP17_OR_LATER
+/// 임의 키 타입 → wstring; `DyneStr`(UcBaseTools.h)로 변환 후 디버그 시 `_fncFieldCheck` 호출.
+template<typename T>
+inline std::wstring PTstr(T&& k)
+{
+	std::wstring kw = DyneStr(std::forward<T>(k));
+#ifdef _DEBUG
+	if (!UcJObj::s_bSkipFieldCheck && UcJObj::_fncFieldCheck)
+		UcJObj::_fncFieldCheck(kw);
+#endif
+	return kw;
+}
+#endif
 
 
 
-
+/// UcJArr는 JSON 객체 배열을 나타내는 클래스
 
 
 
@@ -2976,6 +2985,8 @@ inline ShJArr UcJObj::A(TKEY k, bool bCreat)
 	return {};// ShJArr();
 }
 
+
+
 template <typename TKEY>
 inline ShJObj UcJObj::O(TKEY k, bool bCreat)
 {
@@ -3600,6 +3611,10 @@ inline void UcJObj::operator=(std::initializer_list<InitItem> initList)
 	}
 }
 
+inline JUnit JUnit::operator()(int key)
+{
+	return operator()(PTstr(key));
+}
 
 //dwk: 2025-12-01 12:35 
 //dwk: 2025-12-02 11:09 Arc_MfcArray CArray<VAR, const VAR&> 때문에 둘다 template 으로 변경

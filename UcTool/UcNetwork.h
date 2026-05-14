@@ -313,6 +313,7 @@ std::shared_ptr<std::vector<BYTE>> UcGetRemoteBuffer(CStringW sUrl, PWS sAgent, 
 
 std::string UcGetExternalIP();
 
+UCTOOLDYNAMIC std::tuple<std::string, int> UcGetPortFromSocket(SOCKET clientSock);
 
 
 

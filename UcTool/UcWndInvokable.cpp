@@ -1000,6 +1000,7 @@ public:
 	}
 };
 
+
 2 - B.이미 WindowProc을 override하고 있는 경우 :
 class CMyDialog : public CDialog
 {
@@ -1096,3 +1097,4 @@ _timer->DelayAndRunOnce(__FUNCTION__, 10_sec,
 기존: class CMyDialog : public CDlgInvokable  // 각 클래스마다 상속 필요
 새로운 : CMainFrame에만 한 번 설정 → 어디서든 PostMainTaskSelf(AfxGetMainWnd(), ...) 사용!
 #endif // _Usage_PostMainTask_LambdaTimer
+

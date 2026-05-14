@@ -1109,3 +1109,20 @@ bool UcIsValidIPAddress(const CString& ip)
 
 	return true;
 }
+
+UCTOOLDYNAMIC
+std::tuple<std::string, int> UcGetPortFromSocket(SOCKET clientSock)
+{
+	sockaddr_in addr{};
+	int len = sizeof(addr);
+	int port = 0;
+	char ip[64]{};
+	if (getsockname(clientSock, (sockaddr*)&addr, &len) == 0) {
+		inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+		port = ntohs(addr.sin_port);
+		//printf("local ip=%s port=%d\n", ip, port);
+	}
+	string sip(ip);
+	return make_tuple(sip, port);
+}
+

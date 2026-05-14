@@ -498,7 +498,7 @@ std::shared_ptr<MyMonitorEnumContext> UcGetMonitorInfo()
 //void MoveWindowToMonitor(HWND hWnd, int monitorIndex);
 /// <param name="monitorIndex">0,1,2..</param>
 /// <param name="monitors"></param>
-void UcMoveWindowToMonitor(CWnd* pWnd, const MONITORINFOEX& mi)// std::vector<MONITORINFOEX>& monitors)
+UCTOOLDYNAMIC void UcMoveWindowToMonitor(CWnd* pWnd, const MONITORINFOEX& mi)// std::vector<MONITORINFOEX>& monitors)
 {
 	//if (!pWnd || monitorIndex < 0 || monitorIndex >= monitors.size())
 	//	return;
@@ -573,5 +573,20 @@ int UcMonitorDevice()
 	//DWKTRACE(L"%v", std_cout.str().c_str());
 
 	return 0;
+}
+
+
+/// background 에서도 메인 윈도우를 가져 올수 있다. AfxGetMainWnd() 사용 하면 안됨
+UCTOOLDYNAMIC HWND UcGetMainWnd()
+{
+	HWND h = nullptr;
+
+	if (AfxGetApp() &&
+		AfxGetApp()->m_pMainWnd &&
+		::IsWindow(AfxGetApp()->m_pMainWnd->GetSafeHwnd()))
+	{
+		h = AfxGetApp()->m_pMainWnd->GetSafeHwnd();
+	}
+	return h;
 }
 

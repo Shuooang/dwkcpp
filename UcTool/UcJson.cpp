@@ -13,6 +13,7 @@
 #include <vector>
 #include <memory>
 #include <fstream>//std::ofstream
+#include <iterator>
 #if CPP17_OR_LATER
 #include <any>
 #endif
@@ -23,6 +24,12 @@
 #include <tuple>
 #include <typeindex>
 #include <unordered_map>
+#include <set>
+#include <cctype>
+#ifdef _DEBUG
+#include <filesystem>
+#include <mutex>
+#endif
 
 #include <basetsd.h>
 #include <minwindef.h>
@@ -50,8 +57,143 @@ DWKREMINDER("매크로 남발 하지 말자. 비슷한 코드가 반복 되더�
 COleDateTime UcJObj::__base(1980, 1, 1, 0, 0, 0);
 
 
+std::function<BOOL(jstring& k)> UcJObj::_fncFieldCheck;
 
-//BOOL UcJObj::s_bSkipFieldCheck{ TRUE };
+#ifdef _DEBUG
+BOOL UcJObj::s_bSkipFieldCheck{ TRUE };
+#else
+BOOL UcJObj::s_bSkipFieldCheck{ FALSE };
+#endif // _DEBUG
+
+#ifdef _DEBUG
+namespace {
+	std::set<std::wstring> s_sqlBackupFieldNames = {
+		L"type",//CUcRecset::QueryToTableJson
+		L"table",//CUcRecset::QueryToTableJson
+		L"fields",//CUcRecset::QueryToTableJson
+		L"rows",//CUcRecset::QueryToTableJson
+	};
+
+	/// UcLength(content)
+	void CollectBacktickFNamesFromSqlUtf8(const std::string& content, std::set<std::wstring>& out)
+	{
+		size_t i0 = 0;
+		auto len = UcLength(content);
+		if (len >= 3
+			&& (unsigned char)content[0] == 0xEF && (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF)
+			i0 = 3;
+		for (size_t i = i0; i + 2 < len; ++i) {
+			if (content[i] != '`')
+				continue;
+			if (content[i + 1] != 'f')
+				continue;
+			size_t j = i + 2;
+			while (j < len) {
+				unsigned char c = (unsigned char)content[j];
+				if (std::isalnum(c) || c == '_')
+					++j;
+				else
+					break;
+			}
+			if (j < len && content[j] == '`' && j > i + 2) {
+				std::wstring w;
+				w.reserve(j - (i + 1));
+				for (size_t k = i + 1; k < j; ++k)
+					w += (wchar_t)(unsigned char)content[k];
+				out.insert(std::move(w));
+				i = j;
+			}
+		}
+	}
+
+	void CollectBacktickFNamesFromSqlWstr(const CStringW& content, std::set<std::wstring>& out)
+	{
+		size_t i0 = 0;
+		auto len = UcLength(content);
+		//if (len >= 3
+		//	&& (unsigned char)content[0] == 0xEF && (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF)
+		//	i0 = 3;
+		for (size_t i = i0; i + 2 < len; ++i) {
+			if (content[i] != '`')
+				continue;
+			if (content[i + 1] != 'f')
+				continue;
+			size_t j = i + 2;
+			while (j < len) {
+				wchar_t c = (wchar_t)content[j];
+				if (std::isalnum(c) || c == '_')
+					++j;
+				else
+					break;
+			}
+
+			if (j < len && content[j] == '`' && j > i + 2) {
+				std::wstring w;
+				w.reserve(j - (i + 1));
+				for (size_t k = i + 1; k < j; ++k)
+					w += (wchar_t)content[k];
+				out.insert(std::move(w));
+				i = j;
+			}
+		}
+	}
+
+	void MergeKnownJsonParamFieldNamesInto(std::set<std::wstring>& out)
+	{
+		static const wchar_t* const kExtra[] = {
+			L"fRows", L"fCols", L"fRidRelayId", L"fOcdCode", L"fOTP", L"fMipMyIP",
+			L"fRole", L"fPort",
+		};
+		for (auto p : kExtra)
+			out.insert(p);
+	}
+
+	bool LooksLikeDbHungarianField(const jstring& k)
+	{
+		if (k.size() < 2 || k[0] != L'f')
+			return false;
+		return k[1] >= L'A' && k[1] <= L'Z';
+	}
+}//namespace
+
+bool UcJObj::LoadSqlBackupFieldNames(LPCWSTR pathToSqlFile)
+{
+	DWKFUNC;
+	s_sqlBackupFieldNames.clear();
+	std::error_code ec;
+	const std::filesystem::path path(pathToSqlFile);//utf-8
+	if (!std::filesystem::exists(path, ec)) {
+		DWKTRACE(L"LoadSqlBackupFieldNames: 파일 없음 path=%ls ec=%d", pathToSqlFile, ec.value());
+		return false;
+	}
+	std::ifstream ifs(path, std::ios::binary);
+	if (!ifs) {
+		DWKTRACE(L"LoadSqlBackupFieldNames: 열기 실패 path=%ls", pathToSqlFile);
+		return false;
+	}
+	std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+	CStringW sqlW = UcUTF8ToWchar(content);
+	CollectBacktickFNamesFromSqlWstr(sqlW, s_sqlBackupFieldNames);
+	//CollectBacktickFNamesFromSqlUtf8(content, s_sqlBackupFieldNames);
+	MergeKnownJsonParamFieldNamesInto(s_sqlBackupFieldNames);
+	DWKTRACE(L"LoadSqlBackupFieldNames: %v 필드 path=%v", s_sqlBackupFieldNames.size(), pathToSqlFile);
+	return !s_sqlBackupFieldNames.empty();
+}
+
+BOOL UcJObj::FieldCheckAgainstLoadedSqlBackupFields(jstring& k)
+{
+	DWKUSETRACE;
+	if (s_sqlBackupFieldNames.empty())
+		return TRUE;
+	if (!LooksLikeDbHungarianField(k))
+		return TRUE;
+	if (s_sqlBackupFieldNames.count(k))
+		return TRUE;
+	DWKTRACE(L"dwk: 없는 키 '%v'", k);
+	ASSERT("dwk: 없는 키" == 0);
+	return TRUE;
+}
+#endif // _DEBUG
 
 ///                 FUNCTION LINE ERROR   JSON_POS   JSON_LINE   JSON_COLUMN
 std::list<JException> UcJson::s_errors;
@@ -3045,6 +3187,7 @@ void JUnit::operator=(std::map<std::wstring, std::wstring>& v) { SET_SHARED_JVAL
 void JUnit::operator=(std::map<std::wstring, CStringW>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::map<std::wstring, int>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::map<std::wstring, double>& v) { SET_SHARED_JVAL(v); }
+
 void JUnit::operator=(std::map<std::wstring, std::vector<std::wstring>>& v) { SET_SHARED_JVAL(v); }
 
 
@@ -5814,6 +5957,8 @@ bool UcJson::SaveXmlToFile(const ShJVal value, const std::wstring& filePath)
 ShJBase UcJTable::RowObj(size_t row)
 {
 	auto shObj = NEWSHP(UcJObj);
+	if (this->RowSize() <= row)
+		throw_str(L"DB RowSize is less than row:%v.", row);
 
 	// _mFieldCol : vector<pair<fieldName, colIndex>>
 	for (const auto& fc : _mFieldCol) {

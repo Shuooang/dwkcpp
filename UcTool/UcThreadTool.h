@@ -373,6 +373,7 @@ public:
 
 	void Unlock() {
 		if (m_isLocked) {
+			_Analysis_assume_lock_held_(m_cs.m_sec);
 			m_cs.Unlock();
 			m_isLocked = false;
 		}
@@ -451,12 +452,11 @@ public:
 	std::thread _th;
 	//int _error{ 0 };
 
-	/// PostMainTask를 불러라.
-	std::function<void(UcThread*)> _onThreadError;
-
-	CStringA _tag;
-	CStringA _sFile;
-	int _nLine{ 0 };
+	/// Detach 일경우 this가 std::thread 내부 에서 this가 스택변수라 없어질수 있으므로 멤버 쓰지 말아야
+	//std::function<void(UcThread*)> _onThreadError;
+	//std::wstring _tag;
+	//CStringA _sFile;
+	//int _nLine{ 0 };
 
 	UcThread() {
 	}
@@ -465,84 +465,87 @@ public:
 		// 람다(특히 중첩·mutable 캡처)를 그대로 std::thread에 넘기면 MSVC가 void(*)(void) 쪽으로
 		//std::function<void()> job = std::forward<Func>(fn);
 		StartThread(fn, tag, onThError, sFile, nLine);
-		//_th = std::thread([this, job = std::move(job), tag]() mutable {
-		//	try {
-		//		try {
-		//			job();//job = nullptr;   // 이 경우 mutable 이 필요
-		//		}
-		//		UCCATCH_ALL;/// 이것은 rethrow 하기 때문에 다시 try{}catch{}해야 한다.
-		//		///KException.s_fncExceptionDealer를 채워야 로그 처리가 된다.
-		//	}
-		//	catch (...) {
-		//		_break;
-		//	}
-		//	});
 	}
 
-	void StartThread(std::function<void()> job, LPCSTR tag = nullptr, std::function<void(UcThread*)> onThError = nullptr, LPCSTR sFile = nullptr, int nLine = 0) {
-		if (tag)
-			_tag = tag;
-		ASSERT(!_th.joinable());
-		if(onThError)
-			_onThreadError = onThError;
-		if (sFile)
-			_sFile = sFile;
-		if (nLine)
-			_nLine = nLine;
-		CStringA tagA = _tag;/// this 가 사라졌을 수도 있음. 필요한건 모두 캡쳐해서 넘겨야.
-		_th = std::thread([this, job = std::move(job), tagA]() mutable {
-#pragma region thread tag mapping
-			const DWORD tid = ::GetCurrentThreadId();
-			if (!tagA.IsEmpty()) {
-				UcThreadTag_Register(tid, tagA.GetString());
-			}
-			//struct UcThreadTag_Scope {
-			//	DWORD id{};
-			//	bool active{};
-			//	~UcThreadTag_Scope() {
-			//		if (active)
-			//			UcThreadTag_Unregister(id);
-			//	}
-			//} tagScope{ tid, !tagA.IsEmpty() };
-#pragma endregion thread tag mapping
-
-			try {
-				try {
-					job();//job = nullptr;   // 이 경우 mutable 이 필요
-				}
-				UCCATCH_ALL;/// 이것은 rethrow 하기 때문에 다시 try{}catch{}해야 한다.
-				///KException.s_fncExceptionDealer를 채워야 로그 처리가 된다.
-			}
-			catch (...) {
-				if (_onThreadError)
-					_onThreadError(this);
-				_break;
-			}
-			});
-		//_th = std::thread([this, fn = std::move(fn)]() mutable {
-		//	try {
-		//		try {
-		//			fn();
-		//		}
-		//		UCCATCH_ALL;
-		//	}
-		//	catch (...) {
-		//		_break;
-		//	}
-		//	});
-	}
+	void StartThread(std::function<void()> job, LPCSTR tag = nullptr, std::function<void(UcThread*)> onThError = nullptr, LPCSTR sFile = nullptr, int nLine = 0);
 
 	//[[deprecated]]
-	template<typename Func>
-	UcThread& operator=(Func&& fn) {
-		ASSERT(0);//[[deprecated]]
-		StartThread(fn);
-		return *this;
-	}
+	//template<typename Func>
+	//UcThread& operator=(Func&& fn) {
+	//	ASSERT(0);//[[deprecated]]
+	//	StartThread(fn);
+	//	return *this;
+	//}
+
 	bool joinable() const noexcept { return _th.joinable(); }
 	void join() { if (_th.joinable()) _th.join(); }
-	void detach() { if (_th.joinable()) _th.detach(); }
+
+	/// <summary>
+	/// 주의: Detatch 하면, this가 사라 져서 _onThreadError 같은 멤버가 없을 수 있다.
+	/// </summary>
+	void Detach() {
+		if (_th.joinable()) 
+			_th.detach(); 
+	}
 
 private:
 };
 
+
+//[ UcBaseTools.h 에서 옮겨옴
+class CUcCriticalSection : public CCriticalSection
+{
+public:
+	CUcCriticalSection()
+		: m_nLocked(0)
+	{
+	}
+	LONG m_nLocked;
+	void Increase() { InterlockedIncrement(&m_nLocked); }
+	void Decrease() { InterlockedDecrement(&m_nLocked); }
+
+	///?주의: 아래걸 안쓰면 CCriticalSection::Lock() 안에서는 
+	/// virtual 이 아니므로 내부 걸 써버려서 overrided Lock을 못 부른다.
+	virtual BOOL Lock(DWORD dwTimeout)
+	{
+		ASSERT(dwTimeout == INFINITE);
+		(void)dwTimeout;
+		return Lock();
+	}
+
+	/// 이걸 모든 객체가 override해야 어디서 스레드 lock 걸린줄 알수 있다.
+	virtual BOOL Lock()
+	{
+		::EnterCriticalSection(&m_sect);
+		return TRUE;
+	}
+};
+
+class UCTOOLDYNAMIC CSyncAutoLock : public CSingleLock
+{
+public:
+	// CSyncObject 는 CCriticalSection CKCriticalSection이 대중
+	explicit CSyncAutoLock(CSyncObject* pObject, BOOL bInitialLock = TRUE, LPCSTR sFile = NULL, int iLine = 0, LPCSTR sobj = NULL);
+	virtual ~CSyncAutoLock();
+
+	UINT64 m_token{ 0 };
+	ULONGLONG m_ull;
+	CTime m_tLocked;
+	CStringW m_sObj;
+	CStringA m_sFile;
+	int m_iLine;
+
+	BOOL Lock(DWORD dwTimeOut = INFINITE);//constructor 에서 부르므로 virtual 제거. cppcheck
+	virtual BOOL Unlock();
+	virtual BOOL Unlock(LONG lCount, LPLONG lPrevCount = NULL);
+	virtual BOOL IsLocked();
+};
+//Id: virtualCallInConstructor
+//Virtual function 'Lock' is called from constructor 'CSyncAutoLock(CSyncObject*pObject,BOOL bInitialLock=TRUE,LPCSTR sFile=NULL,int iLine=0,LPCSTR sobj=NULL)' at line 315. Dynamic binding is not used.
+
+inline BOOL CSyncAutoLock::IsLocked()
+{
+	return m_bAcquired;
+}
+
+//] UcBaseTools.h 에서 옮겨옴

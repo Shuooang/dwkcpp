@@ -14,7 +14,7 @@
 
 #include <afxwin.h>
 #include <afxext.h>
-
+#include <afxcview.h>
 
 #include <afxdisp.h>
 

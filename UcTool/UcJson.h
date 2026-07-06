@@ -367,12 +367,14 @@ public:
 class UcJObj;
 class UCTOOLDYNAMIC UcJTable {
 public:
-	UcJObj* _tbl{ nullptr };
+	//UcJObj* _tbl{ nullptr };
+	ShJVal _tbl{ nullptr };
 	ShJArr _fields;// = tbl->A(L"fields", false);
 	ShJArr _rows;// = tbl->A(L"rows", false);
 	std::map<std::wstring, int> _mFieldCol;
 
-	UcJObj* JObj() { return _tbl; }
+	ShJVal JObj() { return _tbl; }
+	//UcJObj* JObj() { return _tbl; }
 public:
 	size_t ColSize();
 	size_t RowSize();
@@ -427,6 +429,10 @@ public:
 	
 	template <typename TCol>
 	CStringW CellS(const TCol& col, size_t row, LPCWSTR def = L"") { return Cell(col, row)->S(def); }
+
+	template <typename TCol>
+	LPCWSTR CellSP(const TCol& col, size_t row, LPCWSTR def = L"") { return Cell(col, row)->SP(def); }
+	
 	template <typename TCol>
 	CStringA CellSA(const TCol& col, size_t row, LPCSTR def = "") { 
 		return CStringA(Cell(col, row)->S(def));
@@ -454,6 +460,7 @@ public:
 /// 함수도 foward declaration로 선언해 놓고,그래야 UcJObj에서 쓸 수 있다.
 template<typename T> std::wstring PTstr(T&& k);
 
+BOOL GeneralFieldCheck(const jstring& k);
 
 //#ifdef _UnsortedHash_
 //	public KStdHashMap<jstring, ShJVal>// 릴리즈에서는 가장 빠른 unsorted map을 쓴다.
@@ -465,12 +472,10 @@ template<typename T> std::wstring PTstr(T&& k);
 class UCTOOLDYNAMIC UcJObj : public KStdMap<jstring, ShJVal>, public JBase
 {
 public:
-	static std::function<BOOL(jstring& k)> _fncFieldCheck;
-	static BOOL s_bSkipFieldCheck;
-#ifdef _DEBUG
-	static bool LoadSqlBackupFieldNames(LPCWSTR pathToSqlFile);
-	static BOOL FieldCheckAgainstLoadedSqlBackupFields(jstring& k);
-#endif
+	static std::function<BOOL(const jstring& k)> _fncFieldCheck;
+	static BOOL s_bCheckEachField;
+	static bool LoadSqlBackupFieldNames(std::vector<PWS>& preFields, LPCWSTR pathToSqlFile);
+	static BOOL FieldCheckAgainstLoadedSqlBackupFields(const jstring& k);
 
 	struct InitItem {
 		jstring key;
@@ -481,7 +486,7 @@ public:
 			: key(PTstr(k)), val(v)
 		{
 		}
-
+		/// `MakeRemoteCallObj(L"NgsAdmin_login", { { L"fRidRelayID", rid }, ... })` 로 param 초기화.
 		template<typename TKEY, typename TVAL>
 		InitItem(TKEY k, const TVAL& v);
 	};
@@ -561,7 +566,7 @@ public:
 		//if (this->Has(k))
 		//	_break;//디버그 용도//dwk: 2025-11-14 10:55 ~CSaveLoad 에서 상위 노드에 넣고, 또 넣는지 보려고
 		ASSERT(val->IsVal());///JVal로 싸서 줘야지. SHP<UcJObj> 를 바로 오면 안됨.
-		//if (!s_bSkipFieldCheck && _fncFieldCheck)
+		//if (s_bCheckEachField && _fncFieldCheck)
 		//	bOK = _fncFieldCheck(kw);
 #endif // _DEBUG
 		//if (bOK)
@@ -718,13 +723,8 @@ public:
 
 	BOOL Lookup(jstring k, ShJVal & v) override
 	{
-		BOOL bOK = TRUE;
 #ifdef _DEBUG //필드체크 Lookup
-		if (!UcJObj::s_bSkipFieldCheck && _fncFieldCheck)
-		{
-			//JString kw(k);
-			bOK = _fncFieldCheck(k);
-		}
+		GeneralFieldCheck(k);
 #endif // _DEBUG
 		return __super::Lookup(k, v);
 	}
@@ -768,7 +768,9 @@ public:
 	/// 아래 5개도 template <typename TKEY> 으로 전환 해야 할 듯
 
 	/// 길이가 1이상 이면 리턴. 아니면 널
-	size_t Length(JKEYSTR k);
+	template <typename TKEY>
+	size_t Length(TKEY k);
+
 	template <typename TKEY>
 	BOOL IsEmpty(TKEY k) { return !Len(k); }
 	LPCWSTR LenS(JKEYSTR k, CStringW & sv);
@@ -1197,10 +1199,11 @@ public:
 	ShJVal O(TKEY k, bool bCreat = false);
 
 
-	SHP<UcJTable> Table() {
-		return Table((UcJObj*)this);
-	}
-	SHP<UcJTable> Table(UcJObj* pbj);//dwk: 2026-03-25 15:10 
+	//SHP<UcJTable> Table() {
+	//	return Table((UcJObj*)this);
+	//}
+	//SHP<UcJTable> Table(UcJObj* pbj);//dwk: 2026-03-25 15:10 
+	static SHP<UcJTable> Table(ShJVal shTbl2);//dwk: 2026-03-25 15:10 
 
 	template <typename TKEY>
 	SHP<UcJTable> Table(TKEY k);//dwk: 2026-03-25 15:10 
@@ -1312,7 +1315,8 @@ public:
 	/// 키값이 있나 체크
 	template <typename TKEY>
 	bool Has(TKEY k) {
-		return __super::Find(PTstr(k)) != this->end();
+		auto it = KStdMap::Find(PTstr(k));
+		return it != this->end();
 	}
 
 	template <typename TKEY>
@@ -1447,14 +1451,29 @@ inline std::wstring PTstr(T&& k)
 {
 	std::wstring kw = DyneStr(std::forward<T>(k));
 #ifdef _DEBUG
-	if (!UcJObj::s_bSkipFieldCheck && UcJObj::_fncFieldCheck)
-		UcJObj::_fncFieldCheck(kw);
+	GeneralFieldCheck(kw);
 #endif
 	return kw;
 }
 #endif
 
 
+inline BOOL GeneralFieldCheck(const jstring& k)
+{
+	BOOL bOK{ TRUE };
+	if (UcJObj::s_bCheckEachField)
+	{
+		if (UcJObj::_fncFieldCheck)
+			bOK = UcJObj::_fncFieldCheck(k);
+		else
+			bOK = UcJObj::FieldCheckAgainstLoadedSqlBackupFields(k);
+	}
+	if (!bOK) {
+		DWKFUNCV(L"Key(%v) is not avaiable.", k);
+		ASSERT(bOK);
+	}
+	return bOK;
+}
 
 /// UcJArr는 JSON 객체 배열을 나타내는 클래스
 
@@ -2454,8 +2473,17 @@ inline double UcJArr::GetAtD(int i, double def)
 inline UcJArr* JVal::AsArrPtr() { ASSERT(IsArray());	return nod_ ? nod_->Arr() : NULL; }
 inline UcJObj* JVal::AsObjPtr() { ASSERT(IsObject());	return nod_ ? nod_->Dic() : NULL; }
 
-
-
+template <typename TKEY>
+inline size_t UcJObj::Length(TKEY k)
+{
+	ShJVal sjv;
+	if (Lookup(PTstr(k), sjv))	{
+		ASSERT(!sjv->Val()->IsArray() && !sjv->Val()->IsObject());
+		const wstring& ws = sjv->Val()->StrRef();
+		return ws.length();
+	}
+	return 0;
+}
 /// double 실수 인경우 소수점 아래 수 참조 하여 문자열 리턴 123.12343421234 => "123.12"
 template <typename TKEY>
 inline CStringW UcJObj::FStr(TKEY k, int point, LPCWSTR def)
@@ -3028,7 +3056,7 @@ SHP<UcJTable> UcJObj::Table(TKEY key)//dwk: 2026-03-25 15:10
 	ShJObj shTbl = this->O(key, false);
 	if (!shTbl || !shTbl->IsDic())
 		return {};
-	return Table(shTbl->Dic());
+	return UcJObj::Table(static_cast<ShJVal>(shTbl));
 }
 
 template <typename TKEY>
@@ -3471,7 +3499,7 @@ inline void UcJObj::SetDefaults(std::initializer_list<std::pair<LPCSTR, std_any>
 			SetIfNull(key, std_any_cast<std::array<float, 4>>(value), bOverwrite);
 		else {
 			ASSERT(0);
-			throw_json_fmt(L"Unkown type to set.(%s)", CStringA(value.type().name()).GetString());
+			throw_json_fmt(L"Unkown type to set.(%s)", CStringW(value.type().name()).GetString());
 		}
 	}
 }
@@ -3492,7 +3520,9 @@ void UcJsonToData(UcJObj& jDocData, SHP<JBase>& sjobj, bool bToJson);
 void UcJsonSave(UcJObj& jDocData, CFile& oFile, function<int(LPCWSTR, int)> cbChk = NULL, int preety = 3);
 //void UcJsonSave(UcJObj& jDocData, CStringW sFile, BOOL bBackup = FALSE);
 int UcJsonLoad(SHP<JBase>& jDocData, CFile& oFile, function<int(int, int, LPCWSTR)> cb = nullptr);
+UCTOOLDYNAMIC
 int UcJsonLoad(SHP<JBase>& jDocData, CString sFile);
+UCTOOLDYNAMIC
 int UcJsonLoad(SHP<JBase>& jDocData, LPCSTR psUtf8, DWORD len, function<int(int, int, LPCWSTR)> cb = nullptr);
 
 UCTOOLDYNAMIC
@@ -3505,6 +3535,7 @@ inline SHP<JBase> UcJsonLoad(LPCWSTR sWstr, DWORD len, function<int(int, int, LP
 }
 int UcJsonLoad(UcJObj& jDocData, CFile& oFile, function<int(int, int, LPCWSTR)> cb = nullptr);
 
+UCTOOLDYNAMIC
 void UcJsonSave(UcJObj& jDocData, CString sPath, BOOL bBackup = FALSE, int nDayExpire = 0, int preety = 3);
 void UcJsonSave(SHP<JBase> jDocData, CString sPath, BOOL bBackup = FALSE, int nDayExpire = 0, int preety = 3);
 
@@ -3592,7 +3623,7 @@ inline JVal* UcJTable::Cell(size_t col, size_t row)
 template<typename TKEY, typename TVAL>
 inline UcJObj::InitItem::InitItem(TKEY k, const TVAL& v)
 	: key(PTstr(k))
-	, val(make_shared<JVal>(v))
+	, val(make_shared<JVal>(v))//JVal::JVal 을 호출 한다.
 {
 }
 
@@ -3609,6 +3640,22 @@ inline void UcJObj::operator=(std::initializer_list<InitItem> initList)
 	for (const auto& it : initList) {
 		Set(it.key.c_str(), it.val);
 	}
+}
+
+/// 23023 원격 호출 JSON: `{ "function": "...", "param": { ... } }`
+inline UcJObj MakeRemoteCallObj(LPCWSTR sFunction, std::initializer_list<UcJObj::InitItem> paramItems)
+{
+	UcJObj jobj;
+	jobj(L"function") = CStringW(sFunction);
+	jobj(L"param") = UcJObj(paramItems);
+	return jobj;
+}
+inline UcJObj MakeRemoteCallObj(LPCWSTR sFunction, UcJObj& jParam)
+{
+	UcJObj jobj;
+	jobj(L"function") = CStringW(sFunction);
+	jobj(L"param") = jParam;// UcJObj(paramItems);
+	return jobj;
 }
 
 inline JUnit JUnit::operator()(int key)

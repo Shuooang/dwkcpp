@@ -20,7 +20,9 @@
 #endif
 inline LPCWSTR GetDevIDE()
 {
-#if _MSC_VER >= 1940
+#if _MSC_VER >= 1950
+	return L"VS2026";
+#elif _MSC_VER >= 1940
 	return L"VS2025";
 #elif _MSC_VER >= 1930
 	return L"VS2022";
@@ -30,7 +32,15 @@ inline LPCWSTR GetDevIDE()
 	return L"VS(unknown)";
 #endif
 }
+
 #if UC_LANG >= 201703L
+
+#if UC_LANG >= 202002L
+#define CPP20_OR_LATER 1
+#else
+#define CPP20_OR_LATER 0
+#endif
+
 //DWKWARN("C++17 is supported. in "DWSTR(PROJECT_NAME))
 #define CPP17_OR_LATER 1
 #define CPP_BEFORE_17 0 
@@ -39,6 +49,7 @@ inline LPCWSTR GetDevIDE()
 #else
 DWKWARN("C++14 is supported. (Not C++17) in "DWSTR(PROJECT_NAME))
 #define CPP17_OR_LATER 0 ///?주의: #ifdef를 쓰면 안됨. 반드시 #if 를 써야함.
+#define CPP20_OR_LATER 0
 #define CPP_BEFORE_17 1 //C++14 
 #define INLINE_STATIC static
 #define EXTERN_STATIC extern
@@ -365,33 +376,11 @@ namespace std {
 
 
 
-#include <afxmt.h> //CCriticalSection
+//#include <afxmt.h> //CCriticalSection
+
+#include "UcStdUsing.inl"
 
 #define _UcTool_
-//using namespace std; 대신 일부믄 사용 하기 위해. 이전 코드 호환을 위해.
-//namespace Uc {
-using std::string;
-using std::wstring;
-using std::shared_ptr;
-using std::pair;
-using std::tuple;
-using std::make_shared;
-using std::make_tuple;
-using std::function;
-using std::vector;
-using std::wstringstream;
-using std::stringstream;
-using std::initializer_list;
-using std::dynamic_pointer_cast;
-
-#if CPP17_OR_LATER
-using std::wstring_view;// c++17
-using std::string_view;
-using std::any_cast;
-#endif
-
-template<typename T>
-using SHP = std::shared_ptr<T>;
 
 enum VType {
 	eMpt = VT_EMPTY,
@@ -1774,64 +1763,64 @@ public:
 ///  KSharedObjList는 UcTool.h 에 정의. MFC를 쓰므로
 
 
-
-class CUcCriticalSection : public CCriticalSection
-{
-public:
-	CUcCriticalSection()
-		: m_nLocked(0)
-	{
-	}
-	LONG m_nLocked;
-	void Increase() { InterlockedIncrement(&m_nLocked); }
-	void Decrease() { InterlockedDecrement(&m_nLocked); }
-
-	///?주의: 아래걸 안쓰면 CCriticalSection::Lock() 안에서는 
-	/// virtual 이 아니므로 내부 걸 써버려서 overrided Lock을 못 부른다.
-	virtual BOOL Lock(DWORD dwTimeout)
-	{
-		ASSERT(dwTimeout == INFINITE);
-		(void)dwTimeout;
-		return Lock();
-	}
-
-	/// 이걸 모든 객체가 override해야 어디서 스레드 lock 걸린줄 알수 있다.
-	virtual BOOL Lock()
-	{
-		::EnterCriticalSection(&m_sect);
-		return TRUE;
-	}
-};
-
-
-
-
-class UCTOOLDYNAMIC CSyncAutoLock : public CSingleLock
-{
-public:
-	// CSyncObject 는 CCriticalSection CKCriticalSection이 대중
-	explicit CSyncAutoLock(CSyncObject* pObject, BOOL bInitialLock = TRUE, LPCSTR sFile = NULL, int iLine = 0, LPCSTR sobj = NULL);
-	virtual ~CSyncAutoLock();
-
-	UINT64 m_token{ 0 };
-	ULONGLONG m_ull;
-	CTime m_tLocked;
-	CStringW m_sObj;
-	CStringA m_sFile;
-	int m_iLine;
-
-	BOOL Lock(DWORD dwTimeOut = INFINITE);//constructor 에서 부르므로 virtual 제거. cppcheck
-	virtual BOOL Unlock();
-	virtual BOOL Unlock(LONG lCount, LPLONG lPrevCount = NULL);
-	virtual BOOL IsLocked();
-};
-//Id: virtualCallInConstructor
-//Virtual function 'Lock' is called from constructor 'CSyncAutoLock(CSyncObject*pObject,BOOL bInitialLock=TRUE,LPCSTR sFile=NULL,int iLine=0,LPCSTR sobj=NULL)' at line 315. Dynamic binding is not used.
-
-inline BOOL CSyncAutoLock::IsLocked()
-{
-	return m_bAcquired;
-}
+// moved to UcThreadTool.h
+//class CUcCriticalSection : public CCriticalSection
+//{
+//public:
+//	CUcCriticalSection()
+//		: m_nLocked(0)
+//	{
+//	}
+//	LONG m_nLocked;
+//	void Increase() { InterlockedIncrement(&m_nLocked); }
+//	void Decrease() { InterlockedDecrement(&m_nLocked); }
+//
+//	///?주의: 아래걸 안쓰면 CCriticalSection::Lock() 안에서는 
+//	/// virtual 이 아니므로 내부 걸 써버려서 overrided Lock을 못 부른다.
+//	virtual BOOL Lock(DWORD dwTimeout)
+//	{
+//		ASSERT(dwTimeout == INFINITE);
+//		(void)dwTimeout;
+//		return Lock();
+//	}
+//
+//	/// 이걸 모든 객체가 override해야 어디서 스레드 lock 걸린줄 알수 있다.
+//	virtual BOOL Lock()
+//	{
+//		::EnterCriticalSection(&m_sect);
+//		return TRUE;
+//	}
+//};
+//
+//
+//
+//
+//class UCTOOLDYNAMIC CSyncAutoLock : public CSingleLock
+//{
+//public:
+//	// CSyncObject 는 CCriticalSection CKCriticalSection이 대중
+//	explicit CSyncAutoLock(CSyncObject* pObject, BOOL bInitialLock = TRUE, LPCSTR sFile = NULL, int iLine = 0, LPCSTR sobj = NULL);
+//	virtual ~CSyncAutoLock();
+//
+//	UINT64 m_token{ 0 };
+//	ULONGLONG m_ull;
+//	CTime m_tLocked;
+//	CStringW m_sObj;
+//	CStringA m_sFile;
+//	int m_iLine;
+//
+//	BOOL Lock(DWORD dwTimeOut = INFINITE);//constructor 에서 부르므로 virtual 제거. cppcheck
+//	virtual BOOL Unlock();
+//	virtual BOOL Unlock(LONG lCount, LPLONG lPrevCount = NULL);
+//	virtual BOOL IsLocked();
+//};
+////Id: virtualCallInConstructor
+////Virtual function 'Lock' is called from constructor 'CSyncAutoLock(CSyncObject*pObject,BOOL bInitialLock=TRUE,LPCSTR sFile=NULL,int iLine=0,LPCSTR sobj=NULL)' at line 315. Dynamic binding is not used.
+//
+//inline BOOL CSyncAutoLock::IsLocked()
+//{
+//	return m_bAcquired;
+//}
 
 
 
@@ -1896,6 +1885,19 @@ int tchlen(const TCH* wcs)
 	auto eos = wcs;  // 캐스트 제거
 	while (*eos++);
 	return static_cast<int>(eos - wcs - 1);  // static_cast 사용
+}
+
+template<typename TCH>
+TCH* tchrchr(const TCH* wcs, int ch)
+{
+	if (!wcs)
+		return nullptr;
+	for (const TCH* p = wcs; *p; ++p)
+	{
+		if (*p == (TCH)ch)
+			return const_cast<TCH*>(p);
+	}
+	return nullptr;
 }
 
 template<typename TCH>

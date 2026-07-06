@@ -521,6 +521,29 @@ CStringW DwkFormat(const char* fmtA, Args&&... args) {
 	return std::move(DwkFormatStr(fmt, arAny));
 }
 
+template<typename... Args>
+CStringA DwkFormatA(const char* fmtA, Args&&... args) {
+	std::vector<std_any> arAny = prepareAnyArgs(std::forward<Args>(args)...);
+	CStringW fmt(fmtA);
+	return CStringA(DwkFormatStr(fmt, arAny));
+}
+template<typename... Args>
+CStringA DwkFormatA(const wchar_t* fmt, Args&&... args) {
+	std::vector<std_any> arAny = prepareAnyArgs(std::forward<Args>(args)...);
+	return CStringA(DwkFormatStr(fmt, arAny));
+}
+template<typename... Args>
+std::string DwkFormatString(const char* fmtA, Args&&... args) {
+	std::vector<std_any> arAny = prepareAnyArgs(std::forward<Args>(args)...);
+	CStringW fmt(fmtA);
+	return CStringA(DwkFormatStr(fmt, arAny)).GetString();
+}
+template<typename... Args>
+std::wstring DwkFormatWString(const wchar_t* fmt, Args&&... args) {
+	std::vector<std_any> arAny = prepareAnyArgs(std::forward<Args>(args)...);
+	return DwkFormatStr(fmt, arAny).GetString();
+}
+
 
 #pragma endregion	]DWK_FORMAT
 
@@ -842,8 +865,9 @@ inline void DwkReadIniSettings() //dwk: 2025-03-21 10:07
 #define DWKSTACDUMP {}
 #define DWKUSETRACE DWKSTACDUMP
 #define DWKFUNC {}
-#define DWKFUNCV(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-//#define DWKTRACE(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
+#define DWKFUNCV(fmt, ...) do { (void)(fmt); } while(0)
+//#define DWKFUNCV(fmt, ...) do{(void)(##__VA_ARGS__);}while(0) //release error
+//#define DWKTRACE(fmt, ...) do{(void)(__VA_ARGS__);}while(0) //release error
 #define DWKTRACE(fmt, ...) {}
 #define DWKKTRACE0(fmt) {}
 #define DWKFUNC0(fmt) {}
@@ -860,28 +884,28 @@ inline void DwkReadIniSettings() //dwk: 2025-03-21 10:07
 #define DWKFUNC_77 {}
 #define DWKFUNC_88 {}
 
-#define DWKFUNCV_pr(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_ac(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_sh(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_sl(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_do(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_wm(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_ms(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_55(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_66(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_77(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKFUNCV_88(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_pr(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_ac(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_sh(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_sl(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_do(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_wm(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_ms(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
+#define DWKFUNCV_pr(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_ac(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_sh(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_sl(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_do(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_wm(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_ms(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_55(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_66(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_77(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKFUNCV_88(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_pr(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_ac(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_sh(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_sl(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_do(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_wm(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_ms(fmt, ...) do{(void)(fmt);}while(0)
 #define DWKTRACE_55(fmt, ...) {}//do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_66(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_77(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
-#define DWKTRACE_88(fmt, ...) do{(void)(__VA_ARGS__);}while(0)
+#define DWKTRACE_66(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_77(fmt, ...) do{(void)(fmt);}while(0)
+#define DWKTRACE_88(fmt, ...) do{(void)(fmt);}while(0)
 #endif //_DWKTRACE_TRUE <= _DWKTRACE_ 를 프로젝트 셋팅에 정의해 줘야 한다.
 
 #pragma endregion	]KTRACE
@@ -1350,7 +1374,7 @@ inline CStringW KTrace::Trace(CStringW && sMsg, LPCWSTR sFile, int nLine, LPCWST
 	CStringW kTrace(L"info");// 디폴트 태그.  = iDwk >= 0 ? L"dwk" : L"info";
 	CStringW sMsg1 = sMsg;
 	
-	vector<CStringW> tags = { L"dwk", L"sql", L"pkt", L"hold"};// L"REMINDER" 
+	vector<CStringW> tags = { L"dwk", L"sql", L"pkt", L"hold", L"error"};// L"REMINDER" 
 	auto fnctag = [&kTrace, &sMsg, &sMsg1](const CStringW& tag) -> bool {
 		if (sMsg.Find(tag + L":") == 0) {
 			kTrace = tag;
@@ -1543,15 +1567,15 @@ inline CStringA UcClassHierarchy(CObject * th)
 #include <map>
 class UcIdStrMap {
 public:
-	std::vector<std::map<int, std::tuple<LPCSTR, int, DWORD>>*> _arMapIds;
+	std::vector<std::map<int, std::tuple<LPCSTR, int, ULONGLONG>>*> _arMapIds;
 
-	void AddIdStrMap(std::map<int, std::tuple<LPCSTR, int, DWORD>>* pAppMapIds) {
+	void AddIdStrMap(std::map<int, std::tuple<LPCSTR, int, ULONGLONG>>* pAppMapIds) {
 		_arMapIds.push_back(pAppMapIds);
 	}
 
-	std::tuple<LPCSTR, int, DWORD>* GetIdStrInMap(std::map<int, std::tuple<LPCSTR, int, DWORD>>* pMapIds, int nID, int nCode = 0);
+	std::tuple<LPCSTR, int, ULONGLONG>* GetIdStrInMap(std::map<int, std::tuple<LPCSTR, int, ULONGLONG>>* pMapIds, int nID, int nCode = 0);
 
-	std::tuple<LPCSTR, int, DWORD> GetIdStr(int nID, int nCode = 0);
+	std::tuple<LPCSTR, int, ULONGLONG> GetIdStr(int nID, int nCode = 0);
 
 	CStringA IdStr(int nID, int nCode = 0);
 };
@@ -1693,7 +1717,7 @@ class KNanoTik
 {
 public:
 	LARGE_INTEGER t1{}, t2{}, freq{};
-	double _elapsed;
+	double _elapsed{};
 	KNanoTik() {
 		QueryPerformanceFrequency(&freq);  // 초당 카운트 수 (보통 수백만 단위)
 		QueryPerformanceCounter(&t1);

@@ -25,42 +25,42 @@ _PUT_THIS_TO_DLL_OR_EXE_
 #pragma region thread tag mapping
 #ifdef _DWKTRACE_TRUE
 namespace {
-std::mutex g_ucThreadTagMtx;
-std::unordered_map<DWORD, std::wstring> g_ucThreadTagMap;
+//std::mutex g_ucThreadTagMtx;
+//std::unordered_map<DWORD, std::wstring> g_ucThreadTagMap;
 }
 #endif
 
-void UcThreadTag_Register(DWORD threadId, LPCSTR tag)
-{
-#ifdef _DWKTRACE_TRUE
-	if (!tag || !tag[0])
-		return;
-	std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
-	g_ucThreadTagMap[threadId] = CStringW(tag).GetString();
-#else
-	(void)threadId;
-	(void)tag;
-#endif
-}
-
-void UcThreadTag_Unregister(DWORD threadId)
-{
-#ifdef _DWKTRACE_TRUE
-	std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
-	g_ucThreadTagMap.erase(threadId);
-#else
-	(void)threadId;
-#endif
-}
+//void UcThreadTag_Register(DWORD threadId, LPCSTR tag)
+//{
+//#ifdef _DWKTRACE_TRUE
+//	if (!tag || !tag[0])
+//		return;
+//	std::lock_guard<std::mutex> lk(KException::mtxTag_);
+//	KException::mapTags_[threadId] = CStringW(tag).GetString();
+//#else
+//	(void)threadId;
+//	(void)tag;
+//#endif
+//}
+//
+//void UcThreadTag_Unregister(DWORD threadId)
+//{
+//#ifdef _DWKTRACE_TRUE
+//	std::lock_guard<std::mutex> lk(KException::mtxTag_);
+//	KException::mapTags_.erase(threadId);
+//#else
+//	(void)threadId;
+//#endif
+//}
 
 #ifdef _DWKTRACE_TRUE
 CStringW UcThreadTag_FormatFixed(DWORD threadId)
 {
 	std::wstring raw;
 	{
-		std::lock_guard<std::mutex> lk(g_ucThreadTagMtx);
-		const auto it = g_ucThreadTagMap.find(threadId);
-		if (it != g_ucThreadTagMap.end())
+		std::lock_guard<std::mutex> lk(KException::mtxTag_);
+		const auto it = KException::mapTags_.find(threadId);
+		if (it != KException::mapTags_.end())
 			raw = it->second;
 	}
 	CStringW sraw(raw.c_str());
@@ -84,7 +84,7 @@ CStringW UcThreadTag_FormatFixed(DWORD threadId)
 #if CPP17_OR_LATER
 /// static 멤버 변수는 클래스 정의에서 선언만 하고, cpp 파일에서 정의해야 합니다. (초기화 포함)
 //std::shared_ptr<KTrace> KTrace::instance_;
-int KTrace::wHd_ = 80;
+UCTOOLDYNAMIC int KTrace::wHd_ = 80;
 
 
 //UCTOOLDYNAMIC
@@ -108,10 +108,10 @@ std::shared_ptr<KTrace> KTrace::Instance()
 //std::once_flag KTrace::initFlag_;
 
 /// extern 변수는 헤더에 선언만 하고, cpp에서 정의해야 합니다. (초기화 포함)
-std::mutex mutexHandler_; //14
+UCTOOLDYNAMIC std::mutex mutexHandler_; //14
 
 /// extern 변수 초기화
-std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_ = {
+UCTOOLDYNAMIC std::unordered_map<std::type_index, std::function<void(std_any&, std::wstringstream&, const CStringW&, int&)>> dwk_handlers_ = {
 #ifdef _DEBUG_tst
 	{	typeid(int), [](std_any& operand, std::wstringstream& wss, const CStringW& format, int& pr) {
 		auto ff = format.Mid(1);
@@ -446,13 +446,13 @@ CStringW UcWaitStr(UINT nId)
 	};
 	auto itis = s_mapWait.find(nId);
 	CStringW sid = itis != s_mapWait.end() ? CStringW(itis->second.c_str()) : CStringW(L"Unknown");
-	CStringW sw; sw.Format(L"%s(%u)", sid, nId);
+	CStringW sw; sw.Format(L"%s(%u)", sid.GetString(), nId);
 	return sw;
 }
 #undef IDTOSTR_1
 
 
-std::tuple<LPCSTR, int, DWORD>* UcIdStrMap::GetIdStrInMap(std::map<int, std::tuple<LPCSTR, int, DWORD>>* pMapIds, int id, int nCode)
+std::tuple<LPCSTR, int, ULONGLONG>* UcIdStrMap::GetIdStrInMap(std::map<int, std::tuple<LPCSTR, int, ULONGLONG>>* pMapIds, int id, int nCode)
 {
 	auto it = pMapIds->find(id);
 	if (it != pMapIds->end()) {
@@ -461,7 +461,7 @@ std::tuple<LPCSTR, int, DWORD>* UcIdStrMap::GetIdStrInMap(std::map<int, std::tup
 	return nullptr;
 }
 
-std::tuple<LPCSTR, int, DWORD> UcIdStrMap::GetIdStr(int id, int nCode)
+std::tuple<LPCSTR, int, ULONGLONG> UcIdStrMap::GetIdStr(int id, int nCode)
 {
 	if (id == -1)
 		return {};
@@ -485,7 +485,7 @@ std::tuple<LPCSTR, int, DWORD> UcIdStrMap::GetIdStr(int id, int nCode)
 			auto& tk = std::get<2>(tuple_ref);
 #endif
 			auto tk0 = tk;
-			auto tk1 = GetTickCount();
+			auto tk1 = GetTickCount64();
 			tk = tk1;///dwk: 2025-03-26 09:50 원본 바뀜
 
 			auto psd = tk1 - tk0;
@@ -642,11 +642,11 @@ bool UcIsBuildOverdue(int daysThreshold)// = 100
 bool UcEHaTest()
 {
 	DWKFUNC;
-	char buf[10]{};
-	int ari[10]{};
+	char buf[11]{};
+	int ari[11]{};
 
 	char* pbuf = buf;
-	char* pbuf2 = new char[10];
+	char* pbuf2 = new char[12];
 	int ln = __LINE__;
 	CStringW sw; CStringA sa;
 	//__try {
@@ -696,16 +696,16 @@ bool UcEHScTest()
 {
 	DWKFUNC;
 	// 오류 발생
-	char buf[10]{};
-	int ari[10]{};
+	char buf[11]{};
+	int ari[11]{};
 
 	char* pbuf = buf;
 	try
 	{
 		//pbuf[10] = 100; exe:/EHa, lib:/EHsc : 안죽는다. 심지어 조용히 지나 간다.
 
-		char* pbuf2 = new char[10];
-		char* pbuf3 = new char[10];
+		char* pbuf2 = new char[12];
+		char* pbuf3 = new char[12];
 		pbuf2[11] = 100;//exe:/EHa, lib:/EHsc : 안죽는다. 심지어 조용히 지나 간다.
 		delete pbuf2;//주요: 윗줄 범위 넘어간 침범 있을 경우  delete 할때 죽는다.
 		pbuf2[10] = 'x';//

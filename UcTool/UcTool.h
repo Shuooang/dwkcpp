@@ -3,6 +3,8 @@
 #include <set>
 #include <shlobj.h>//REFKNOWNFOLDERID
 #include <atlbase.h>//CRegKey
+#include <afxmt.h> //CCriticalSection
+#include <afxcoll.h> //CStringArray
 
 #include "UcBaseTools.h"
 #if CPP17_OR_LATER //UcBaseTools.h에 선언 되어 있슴.
@@ -763,6 +765,9 @@ PAS UcShowValueToStr(UINT sv);
 PWS UcUTF8ToHtmlUrl(CStringA& sUtf8, CStringW& sWstr);
 
 
+UCTOOLDYNAMIC 
+CStringW UcFormatStringFromArgs(LPCWSTR fmt, va_list args);
+
 PWS UcWcharToUTF8ToHtmlUrl(CStringW& sWchar, CStringW& sWUrl);
 
 
@@ -842,6 +847,24 @@ public:
 		eNotError = 0b0100,
 	};
 
+	class KExTag {
+	public:
+		KExTag(const std::wstring& tag){
+			std::lock_guard<std::mutex> lk(mtxTag_);
+			auto id = GetCurrentThreadId();
+			mapTags_[id] = tag;
+		}
+		~KExTag(){
+			std::lock_guard<std::mutex> lk(mtxTag_);
+			auto id = GetCurrentThreadId();
+			mapTags_.erase(id);
+		}
+	};
+	/// UcThread 의 _tag를 threadID 로 매핑 해 두었다가, KException이 발생 하면 그 tag를 출력 할 수 있게 한다.
+	/// try전에 스택 방법으로 넣어두었다가, UcThread.StartThread 나갈때 제거 되게 한다.
+	inline static std::map<DWORD, std::wstring> mapTags_;
+	inline static std::mutex mtxTag_;
+	
 	void Init(LPCSTR sExcept, DWORD error, int rcde, LPCWSTR sErr, LPCWSTR sState, LPCWSTR func = NULL, int line = 0, LPCSTR file = NULL, CRuntimeClass* pRc = NULL, int iOp = 0, LPCTSTR sLastErr = NULL, CException* ec = NULL)
 	{
 		_idThread = ::GetCurrentThreadId();
@@ -875,10 +898,7 @@ public:
 		FinishException();//왜 안불리지?
 	}
 
-	// 통합 복사/이동 함수
-	//template<typename T>
-	//void CopyOrMoveFrom(T&& other, bool bMove = false)
-	void CopyOrMoveFrom(const KException& other, bool bMove = false)
+	void CopyFrom(const KException& other)
 	{
 		_idThread              = other._idThread    ;
 		m_nRetCode             = other.m_nRetCode   ;
@@ -889,34 +909,54 @@ public:
 		_status                = other._status      ;
 		_bFinished             = other._bFinished   ;
 		m_bAutoDelete          = other.m_bAutoDelete;
-		
-		_sExcept               = bMove ? std::move(other._sExcept              ): other._sExcept              ;
-		_lastError             = bMove ? std::move(other._lastError            ): other._lastError            ;
-		m_strError             = bMove ? std::move(other.m_strError            ): other.m_strError            ;
-		_func                  = bMove ? std::move(other._func                 ): other._func                 ;
-		_fileTar               = bMove ? std::move(other._fileTar              ): other._fileTar              ;
-		_class                 = bMove ? std::move(other._class                ): other._class                ;
-		m_strStateNativeOrigin = bMove ? std::move(other.m_strStateNativeOrigin): other.m_strStateNativeOrigin;
+
+		_sExcept               = other._sExcept              ;
+		_lastError             = other._lastError            ;
+		m_strError             = other.m_strError            ;
+		_func                  = other._func                 ;
+		_fileTar               = other._fileTar              ;
+		_class                 = other._class                ;
+		m_strStateNativeOrigin = other.m_strStateNativeOrigin;
+	}
+	void MoveFrom(KException&& other) noexcept
+	{
+		_idThread              = other._idThread    ;
+		m_nRetCode             = other.m_nRetCode   ;
+		_error                 = other._error       ;
+		_line                  = other._line        ;
+		_num                   = other._num         ;
+		_iOp                   = other._iOp         ;
+		_status                = other._status      ;
+		_bFinished             = other._bFinished   ;
+		m_bAutoDelete          = other.m_bAutoDelete;
+
+		_sExcept               = std::move(other._sExcept              );
+		_lastError             = std::move(other._lastError            );
+		m_strError             = std::move(other.m_strError            );
+		_func                  = std::move(other._func                 );
+		_fileTar               = std::move(other._fileTar              );
+		_class                 = std::move(other._class                );
+		m_strStateNativeOrigin = std::move(other.m_strStateNativeOrigin);
 	}
 	// 복사 생성자
 	KException(const KException& other) {
-		CopyOrMoveFrom(other, false);
+		CopyFrom(other);
 	}
 	// 이동 생성자
 	KException(KException&& other) noexcept {
-		CopyOrMoveFrom(std::move(other), true);
+		MoveFrom(std::move(other));
 	}
 	// 복사 대입 연산자
 	KException& operator=(const KException& other) {
 		if (this != &other) {
-			CopyOrMoveFrom(other, false);
+			CopyFrom(other);
 		}
 		return *this;
 	}
 	// 이동 대입 연산자
 	KException& operator=(KException&& other) noexcept {
 		if (this != &other) {
-			CopyOrMoveFrom(std::move(other), true);
+			MoveFrom(std::move(other));
 		}
 		return *this;
 	}
@@ -1175,9 +1215,12 @@ CStringW GetFileLineW(LPCWSTR f, int l, LPCWSTR sTrace, LPCWSTR fmt, ...);//dwk:
 #define UcMessageBoxErrorLog(fmt, ...) no_throw_str((PWS)UcMessageBoxGeneralStr(MB_OK|MB_ICONSTOP, fmt, ##__VA_ARGS__))
 #define UcMessageBoxErrorLog1(fmt)     no_throw_str1((PWS)UcMessageBoxGeneralStr(MB_OK|MB_ICONSTOP, fmt))
 
+UCTOOLDYNAMIC
 int UcMessageBoxGeneral(UINT nType, LPCWSTR fmt, ...);
+
 UCTOOLDYNAMIC
 CStringW UcMessageBoxGeneralStr(UINT nType, LPCWSTR fmt, ...);
+
 int UcMessageBoxLastError();
 int UcMessageBoxException(CException* e);
 int UcFileComp(CString sf1, CString sf2);
@@ -1321,7 +1364,27 @@ void UcTrace(const CStringW& sFile, int nLine, const CStringW& sOwner, LPCWSTR f
 
 int UcGetRandomNumber(int minNum, int maxNum);
 
-BOOL UcCopyTextClipboad(LPCWSTR text, HWND hwnd);
+UCTOOLDYNAMIC BOOL UcCopyTextClipboad(LPCWSTR text, HWND hwnd);
+UCTOOLDYNAMIC BOOL UcCopyTextClipboad(CWnd* pWnd, LPCWSTR text);
+UCTOOLDYNAMIC BOOL UcPasteTextClipboard(CWnd* pWnd, CString& str);
+UCTOOLDYNAMIC int UcGetFileName(CString& cstr, UINT id, CWnd* pParent = NULL, BOOL bOpen = TRUE);
+UCTOOLDYNAMIC int UcGetFileName(CString& cstr, LPCTSTR ext, CWnd* pParent = NULL, BOOL bOpen = TRUE);
+UCTOOLDYNAMIC void UcSeparatePathFile(CString& full, CString& path, CString& file);
+UCTOOLDYNAMIC void UcCheckMessage(DWORD dw = 1, int period = 1);
+void UcAutoMessageBox(CWnd* pWnd, LPCTSTR msg, UINT delayMs = 200);
+
+inline void UcReady(long l)
+{
+	while (l--)
+	{
+		MSG msg;
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+	}
+}
 
 int UcIsProcessRunningEx(LPCTSTR lpszProcessName, std::vector<tuple<DWORD, CString, CString>>* dwProcessId = NULL);
 
@@ -1690,6 +1753,13 @@ inline const wchar_t* UcFindChar(const wchar_t* str, wchar_t ch) {
 	return wcschr(str, ch);
 }
 
+UCTOOLDYNAMIC
+int UcReverseFindStr(const CStringW& s, LPCWSTR needle);
+
+/// ODBC 연결 문자열 등에서 PWD= 값을 *** 로 마스킹한다.
+UCTOOLDYNAMIC
+CStringW UcMaskConnPwd(const CStringW& conn);
+
 template <typename TCH, typename Callback>
 void UcCutByTokenT(const TCH* pSrc, const TCH* seps, Callback cb, bool bTrim = false)
 {
@@ -1712,6 +1782,14 @@ void UcCutByTokenT(const TCH* pSrc, const TCH* seps, Callback cb, bool bTrim = f
 	}
 }
 
+inline void UcCutByToken(LPCTSTR psSrc, LPCTSTR seps, CStringArray& ars, bool bTrim = false)
+{
+	ars.RemoveAll();
+	UcCutByTokenT(psSrc, seps, [&ars](auto str) {
+		ars.Add(str);
+	}, bTrim);
+}
+
 //dwk: 2025-08-19 11:26 
 //std::vector<int> UcCutByTokenInt(LPCTSTR psSrc, LPCTSTR seps, bool bTrim = false);
 //std::vector<double> UcCutByTokenDouble(LPCTSTR psSrc, LPCTSTR seps, bool bTrim = false);
@@ -1723,6 +1801,14 @@ std::vector<int> UcCutByTokenInt(const TCH* psSrc, const TCH* seps, bool bTrim)
 		ars.push_back(UcAtoi(str));//token.GetString()
 	}, bTrim);
 	return ars;
+}
+
+inline void UcCutByTokenInt(LPCTSTR psSrc, LPCTSTR seps, CArray<int, int>& wArray, bool bTrim = false)
+{
+	auto ar = UcCutByTokenInt(psSrc, seps, bTrim);
+	wArray.SetSize(0);
+	for (size_t i = 0; i < ar.size(); ++i)
+		wArray.SetAtGrow((INT_PTR)i, ar[i]);
 }
 
 template <typename TCH>

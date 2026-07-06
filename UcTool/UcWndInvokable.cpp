@@ -98,76 +98,6 @@ void KBeginInvoke::freeInvokeFree()
 /// 이 함수는 background thread 에서 UI쪽 변수를 접근 하거나 UI API를 비동기적으로 수행하고자 할때 사용한다.
 /// 언제 수행하는지는 UI의 메시지큐에 Post되므로 UI 작업 뒤로 순서를 기다리다 실행 된다.
 /// 이렇게 하면, UI와 background 작업이 부르럽게 진행 된다.
-UCTOOLDYNAMIC
-void PostMainTask(HWND hw, function<void(LPVOID)> lmda, LPCSTR fnc, int line, LPCSTR note, BOOL bAsync, function<void(LPVOID)> lmdaFinish)
-{
-	if (!::IsWindow(hw))
-	{
-		TRACE("This window is gone.\n");
-		return;
-	}
-	//auto* pLambda = new std::function<void()>(lmda);
-	if (bAsync)
-	{
-		KBeginInvoke* pbi = new KBeginInvoke(lmda, fnc, line, lmdaFinish);
-		pbi->_note = note;
-		pbi->_hwnd = hw;
-		KBeginInvoke::setInvokeFree(pbi);
-		::PostMessage(hw, WM_USER_INVOKE, pbi->_srl, (LPARAM)pbi);
-	}
-	else
-	{	// PostMessage 로 디스페치 하지 않고, 즉시 콜한다. 보통 백그라운드로 타이머 돌려서 하는 루틴을, 버튼을 눌러 즉시 하는 경후 사용.
-		if (lmda)
-			lmda(0);
-	}
-}
-UCTOOLDYNAMIC
-void PostMainTask(CWnd* pWnd, function<void(LPVOID)> lmda, LPCSTR fnc, int line, LPCSTR note, BOOL bAsync, function<void(LPVOID)> lmdaFinish)
-{
-	///?주의: AfxGetMainWnd()를 쓰지 말것. 그거는 현재 스레드의 윈도우를 리턴 함으로서 
-	///		BG thread인 경우 NULL로서 UI 메인윈도가 아니다.
-	if (pWnd == NULL)//!::IsWindow(pWnd->GetSafeHwnd())) pWnd 날라 갔어도 함수 GetSafeHwnd() 는 불려진다.
-		pWnd = AfxGetApp()->GetMainWnd();
-	///?주의: MessageBox나 Modal 이 뜬 경우 MainWindow는 PostMessage를 못 받으니, 가급적 현재 작업중인 윈도에 BeginInvoke 한다.
-	if (IsRealWindow(pWnd))
-		PostMainTask(pWnd->GetSafeHwnd(), lmda, fnc, line, note, bAsync, lmdaFinish);
-	else
-		_break;
-}
-#ifdef _Sample__
-PostMainTask(this, [this](auto pv) {
-	auto pbi = (KBeginInvoke*)pv;
-	);
-#endif // _Sample__
-/// 내부적으로 SendMessage이므로 결과 LRESULT 가 올때 까지 기다린다.
-/// 이 함수는 background thread 에서 UI쪽 변수를 접근 하거나 UI API를 지금 당장 이용하고, 
-///		기다리고 있다가 다음 background  작업을 계속 진행 할때 사용한다.
-///	동기화 되므로 기다린 후 결과값도 받을 수 있다.
-UCTOOLDYNAMIC
-LRESULT SendMainTask(HWND hw, function<LRESULT(LPVOID)> lmda, LPCSTR fnc, int line, LPCSTR note)
-{
-	if (!::IsWindow(hw))
-		return 0;
-	KBeginInvoke* pbi = new KBeginInvoke(lmda, fnc, line);
-	pbi->_note = note;
-	pbi->_hwnd = hw;
-	KBeginInvoke::setInvokeFree(pbi);//Lock
-
-	//CSyncAutoLock __lock(&KBeginInvoke::_csSendMsg, TRUE, __FUNCTION__, __LINE__, "_csSendMsg");
-	/// 위에 락할 필요 없다. 락은 getGabage() 를 쓸때만 한다. 여기서 하면 데드락에 걸린다.
-	return ::SendMessage(hw, WM_USER_INVOKE, pbi->_srl, (LPARAM)pbi);
-}
-
-UCTOOLDYNAMIC
-LRESULT SendMainTask(CWnd * pWnd, function<LRESULT(LPVOID)> lmda, LPCSTR fnc, int line, LPCSTR note)
-{
-	if (pWnd == NULL)//!::IsWindow(pWnd->GetSafeHwnd())) pWnd 날라 갔어도 함수 GetSafeHwnd() 는 불려진다.
-		pWnd = AfxGetApp()->GetMainWnd();
-	if (!::IsWindow(pWnd->GetSafeHwnd()))
-		return 0;
-	return SendMainTask(pWnd->GetSafeHwnd(), lmda, fnc, line, note);
-}
-
 void DebugShowWindow(CWnd * pw, int nCmdShow)
 {
 #ifdef _DEBUG
@@ -851,7 +781,20 @@ void KLongTaskDoing::SafeDownloading(string key)
 			}, 1);
 	}
 }
-
+/// <summary>
+/// UcTool.cpp에서 옮겨옴
+/// </summary>
+UCTOOLDYNAMIC
+void UcPostMessageBoxError(LPCWSTR fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	CStringW sMsg = UcFormatStringFromArgs(fmt, args);
+	va_end(args);
+	PostMainTaskSelf(UcGetMainCWnd(), [sMsg](auto) {
+		UcMessageBoxError(sMsg);
+		});
+}
 #ifdef _UseBaseClassInpokable_
 #ifdef _UseOnWndMsg
 #ifdef _DEBUG

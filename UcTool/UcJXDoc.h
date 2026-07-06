@@ -277,7 +277,7 @@ namespace CJXArchiveDetail {
 //	virtual void ParseString(const CStringA& dataStr) = 0;
 //};
 ////CExArchive
-class CJXArchive : public BASECJXArchive//CExArchive//dwk: 2025-02-12 09:50 JSON 1
+class UCTOOLDYNAMIC CJXArchive : public BASECJXArchive//CExArchive//dwk: 2025-02-12 09:50 JSON 1
 	//, IJXArchive
 {
 public:
@@ -855,7 +855,7 @@ public:
 	/// 변수에서 가져오거나 변수에 넣을 때 반드시 이 객체를 생성한 블러 안에 넣어야한다.
 	/// 그래야 ~CSaveLoad 에서 저장 또는 로드가 완료 된다.
 	/// </summary>
-	class CSaveLoad
+	class UCTOOLDYNAMIC CSaveLoad
 	{
 	public:
 		CSaveLoad(CJXArchive& ar);
@@ -4748,7 +4748,7 @@ inline void CallDocSerializeWithExceptionHandling(TObj* pThis, CJXArchive& ard, 
 #endif // _DEBUG
 
 
-struct Matrix_Temp
+struct UCTOOLDYNAMIC Matrix_Temp
 	: public IDocSerialize //#DocSerialize 1
 {
 	//SET_FACTORY(MatrixTemp);

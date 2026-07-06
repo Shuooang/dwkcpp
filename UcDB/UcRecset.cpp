@@ -1,15 +1,20 @@
 ﻿#include "pch.h"
 
 #include <vector>
+#include <cstring>
 
 #include <sql.h>
 #include <sqlext.h>
 #include <atldbcli.h>
 
 #include "UcRecset.h" // UcDb/UcRecset.h
+#include "UcDbCol.h"
+#include "UcTool/UcTool.h"
 #include "UcTool/UcJson.h"
 
 namespace {
+
+constexpr SQLULEN kSqlLongTextColumnSize = 16777215; // MEDIUMTEXT upper bound
 
 CStringW SqlTypeToJsonType(SWORD sqlType)
 {
@@ -60,6 +65,102 @@ public:
 	}
 };
 
+CStringW OdbcDiagMessage(SQLSMALLINT handleType, SQLHANDLE handle, SQLRETURN rc)
+{
+	CStringW msg;
+	msg.Format(L"ODBC error %d", (int)rc);
+	if (!handle)
+		return msg;
+	SQLWCHAR state[6]{};
+	SQLWCHAR text[1024]{};
+	SQLINTEGER native = 0;
+	SQLSMALLINT textLen = 0;
+	const SQLRETURN dr = SQLGetDiagRecW(handleType, handle, 1, state, &native, text, (SQLSMALLINT)(std::size(text)), &textLen);
+	if (SQL_SUCCEEDED(dr) && textLen > 0)
+		msg.Format(L"[%s] %s (native %d)", (LPCWSTR)state, (LPCWSTR)text, (int)native);
+	return msg;
+}
+
+SQLRETURN BindSqlParam(HSTMT hstmt, SQLUSMALLINT paramIndex, const UcSqlParam& p, SQLLEN& strLenOrInd)
+{
+	const SQLUSMALLINT col = paramIndex;
+	strLenOrInd = 0;
+
+	switch (p.kind)
+	{
+	case UcSQL_NULL:
+		strLenOrInd = SQL_NULL_DATA;
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_WCHAR, SQL_WVARCHAR,
+			0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+
+	case UcSQL_STRING:
+	{
+		auto* ws = static_cast<LPCWSTR>(p.data);
+		if (!ws || !*ws) {
+			strLenOrInd = SQL_NULL_DATA;
+			return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_WCHAR, SQL_WLONGVARCHAR,
+				0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+		}
+		strLenOrInd = SQL_NTS;
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_WCHAR, SQL_WLONGVARCHAR,
+			kSqlLongTextColumnSize, 0, (SQLPOINTER)ws, 0, &strLenOrInd);
+	}
+
+	case UcSQL_UTF8:
+	{
+		auto* u8 = static_cast<LPCSTR>(p.data);
+		if (!u8 || !*u8) {
+			strLenOrInd = SQL_NULL_DATA;
+			return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_LONGVARCHAR,
+				0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+		}
+		strLenOrInd = SQL_NTS;
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_LONGVARCHAR,
+			kSqlLongTextColumnSize, 0, (SQLPOINTER)u8, 0, &strLenOrInd);
+	}
+
+	case UcSQL_INT32:
+	{
+		auto* pv = static_cast<const int*>(p.data);
+		if (!pv) {
+			strLenOrInd = SQL_NULL_DATA;
+			return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+				0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+		}
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER,
+			0, 0, (SQLPOINTER)pv, 0, nullptr);
+	}
+
+	case UcSQL_INT64:
+	{
+		auto* pv = static_cast<const LONGLONG*>(p.data);
+		if (!pv) {
+			strLenOrInd = SQL_NULL_DATA;
+			return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_SBIGINT, SQL_BIGINT,
+				0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+		}
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, SQL_C_SBIGINT, SQL_BIGINT,
+			0, 0, (SQLPOINTER)pv, 0, nullptr);
+	}
+#pragma region MemoApp//[
+	case UcSQL_BINARY:
+	{
+		auto* pb = static_cast<const UcSqlParamBinary*>(p.data);
+		if (!pb || !pb->data || pb->cbLen <= 0) {
+			strLenOrInd = SQL_NULL_DATA;
+			return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, pb ? pb->cType : SQL_C_BINARY,
+				pb ? pb->sqlType : SQL_LONGVARBINARY, 0, 0, (SQLPOINTER)nullptr, 0, &strLenOrInd);
+		}
+		strLenOrInd = pb->cbLen;
+		return SQLBindParameter(hstmt, col, SQL_PARAM_INPUT, pb->cType, pb->sqlType,
+			pb->cbLen, 0, (SQLPOINTER)pb->data, 0, &strLenOrInd);
+	}
+#pragma endregion//]
+	default:
+		return SQL_ERROR;
+	}
+}
+
 } // namespace
 
 CUcRecset::CUcRecset() = default;
@@ -67,6 +168,35 @@ CUcRecset::CUcRecset() = default;
 CUcRecset::~CUcRecset()
 {
 	Close();
+}
+
+void CUcRecset::NoteSql(LPCWSTR psql)
+{
+	if (!psql || !*psql)
+		return;
+	CStringW sql(psql);
+	sql.Trim();
+	if (sql.IsEmpty())
+		return;
+	_lstSql.push_back(sql.GetString());
+	if (_lstSql.size() > 10)
+		_lstSql.pop_front();
+}
+
+void CUcRecset::RecordSqlLog(LPCWSTR psql)
+{
+	if (_sqlLogSuppress > 0 || !psql || !*psql)
+		return;
+	CStringW sql(psql);
+	sql.Trim();
+	if (sql.IsEmpty())
+		return;
+	LPCWSTR err = m_lastError.IsEmpty() ? nullptr : (LPCWSTR)m_lastError;
+	InsertSqlLog(sql, err);
+}
+
+void CUcRecset::InsertSqlLog(LPCWSTR /*sql*/, LPCWSTR /*err*/)
+{
 }
 
 BOOL CUcRecset::IsOpen() const
@@ -110,7 +240,7 @@ BOOL CUcRecset::Open()
 	//---------------------------
 	//Server Information: MariaDB 12.02.000002
 
-	DWKTRACE(L"sql:%s", conn.GetString());
+	DWKTRACE(L"%s", UcMaskConnPwd(conn));
 	BOOL rb{ FALSE };
 	try
 	{
@@ -217,6 +347,8 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 	DWKFUNC;
 	CStringW sql(psql);
 	sql.Trim();
+	NoteSql(sql);
+	KDefer deferSqlLog([&]() { RecordSqlLog(sql); });
 #ifdef _DEBUG
 	std::vector<CStringW> selectFields = ExtractAllFieldsFromSql(sql);
 	for (auto& fld : selectFields) {
@@ -302,7 +434,7 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 	{
 		m_lastError = e->m_strError;
 		//e->Delete();
-		DWKTRACE(L"CDBException");
+		DWKTRACE(L"CDBException:%v", m_lastError);
 		return {};
 	}
 	catch (CException* e)
@@ -358,7 +490,7 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 				colName = fi.m_strName; // L"fSidServerID", table alaias가 있는데 's.'이 빠지고 뒤 fHstHost 만 나오네
 				// s.fHstHost s_Hst 하면 뒤  s_Hst 가 나온다.
 				jsType = SqlTypeToJsonType(fi.m_nSQLType);
-				DWKTRACE(L"col %v. %v, %v:%v", tryCol, colName, fi.m_nSQLType, jsType);
+				//DWKTRACE(L"col %v. %v, %v:%v", tryCol, colName, fi.m_nSQLType, jsType);
 			}
 			catch (CDBException* e) {
 				// 이름 못 얻어도 그냥 진행
@@ -410,7 +542,7 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 				return {};
 			}
 			shRow5->Add(CStringW(textValue));
-			DWKTRACE(L"[%v,%v] %v", row, c, textValue);
+			//DWKTRACE(L"[%v,%v] %v", row, c, textValue);
 		}
 		rows4.Add(NEWSHP(JVal, shRow5, false), false);
 		rs.MoveNext();
@@ -418,16 +550,20 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 
 	rs.Close();
 	if (shTbl2 && shTbl2->IsDic())
-		return shTbl2->Dic()->Table();
+		return UcJObj::Table(shTbl2);
+		//return shTbl2->Dic()->Table();
 	return {};
 }
 
-BOOL CUcRecset::ExecuteCommand(LPCWSTR sql, LPCWSTR logicalKey, LPCWSTR cmdType, UcJObj& outRoot)
+BOOL CUcRecset::ExecuteCommand(LPCWSTR pSql)//, LPCWSTR logicalKey, LPCWSTR cmdType, UcJObj& outRoot)
 {
+	DWKFUNC;
+	CStringW sql(pSql);
+	sql.Trim();
 	m_lastError.Empty();
-	if (!sql || !*sql || !logicalKey || !*logicalKey || !cmdType || !*cmdType)
+	if (sql.IsEmpty())//!sql || !*sql)// || !logicalKey || !*logicalKey || !cmdType || !*cmdType)
 	{
-		SetLastError(L"ExecuteCommand: 인자가 비었습니다.");
+		SetLastError(L"ExecuteCommand: SQL 문이 비었습니다.");
 		return FALSE;
 	}
 	if (!m_db.IsOpen())
@@ -436,24 +572,440 @@ BOOL CUcRecset::ExecuteCommand(LPCWSTR sql, LPCWSTR logicalKey, LPCWSTR cmdType,
 		return FALSE;
 	}
 
+	NoteSql(sql);
+	KDefer deferSqlLog([&]() { RecordSqlLog(sql); });
+
 	try
 	{
 		m_db.ExecuteSQL(sql);
 	}
 	catch (CDBException* e)
 	{
-		m_lastError = e->m_strError;
+		SetLastError(e->m_strError);
+		//DWKFUNCV(L"CDBException: %v", m_lastError);
 		e->Delete();
 		return FALSE;
 	}
+	return TRUE;
+}
 
-	ShJVal sh = outRoot.O(logicalKey, true);
-	if (!sh || !sh->IsDic())
-	{
-		SetLastError(L"ExecuteCommand: UcJObj 블록을 만들 수 없습니다.");
+BOOL CUcRecset::BeginTransaction()
+{
+	m_lastError.Empty();
+	if (!m_db.IsOpen()) {
+		SetLastError(L"BeginTransaction: DB 가 열려 있지 않습니다.");
 		return FALSE;
 	}
-	UcJObj* p = sh->Dic();
-	p->Format(L"type", L"%s", cmdType);
+	try {
+		if (!m_db.BeginTrans()) {
+			SetLastError(L"BeginTransaction failed");
+			return FALSE;
+		}
+	}
+	catch (CDBException* e) {
+		SetLastError(e->m_strError);
+		e->Delete();
+		return FALSE;
+	}
 	return TRUE;
+}
+
+BOOL CUcRecset::CommitTransaction()
+{
+	m_lastError.Empty();
+	if (!m_db.IsOpen()) {
+		SetLastError(L"CommitTransaction: DB 가 열려 있지 않습니다.");
+		return FALSE;
+	}
+	try {
+		if (!m_db.CommitTrans()) {
+			SetLastError(L"CommitTransaction failed");
+			return FALSE;
+		}
+	}
+	catch (CDBException* e) {
+		SetLastError(e->m_strError);
+		e->Delete();
+		return FALSE;
+	}
+	return TRUE;
+}
+
+void CUcRecset::RollbackTransaction()
+{
+	if (!m_db.IsOpen())
+		return;
+	try {
+		m_db.Rollback();
+	}
+	catch (CDBException* e) {
+		SetLastError(e->m_strError);
+		e->Delete();
+	}
+}
+
+BOOL CUcRecset::ExecuteCommandWithParams(LPCWSTR sql, std::initializer_list<UcSqlParam> params)
+{
+	return ExecuteCommandWithParamsImpl(sql, params.begin(), params.size());
+}
+
+BOOL CUcRecset::ExecuteCommandWithParams(LPCWSTR sql, const std::vector<UcSqlParam>& params)
+{
+	return ExecuteCommandWithParamsImpl(sql, params.data(), params.size());
+}
+
+BOOL CUcRecset::ExecuteCommandWithParamsImpl(LPCWSTR sql, const UcSqlParam* params, size_t paramCount)
+{
+	CStringW sqlW(sql ? sql : L"");
+	sqlW.Trim();
+	m_lastError.Empty();
+	if (sqlW.IsEmpty()) {
+		SetLastError(L"ExecuteCommandWithParams: SQL 문이 비었습니다.");
+		return FALSE;
+	}
+	if (!m_db.IsOpen()) {
+		SetLastError(L"ExecuteCommandWithParams: DB 가 열려 있지 않습니다.");
+		return FALSE;
+	}
+
+	HDBC hdbc = m_db.GetHdbc();
+	if (!hdbc) {
+		SetLastError(L"ExecuteCommandWithParams: ODBC 연결 핸들이 없습니다.");
+		return FALSE;
+	}
+
+	NoteSql(sqlW);
+	KDefer deferSqlLog([&]() { RecordSqlLog(sqlW); });
+
+	HSTMT hstmt = SQL_NULL_HSTMT;
+	SQLRETURN ret = SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt);
+	if (!SQL_SUCCEEDED(ret) || !hstmt) {
+		SetLastError(OdbcDiagMessage(SQL_HANDLE_DBC, hdbc, ret));
+		return FALSE;
+	}
+
+	struct StmtGuard {
+		HSTMT h{ SQL_NULL_HSTMT };
+		~StmtGuard() {
+			if (h)
+				SQLFreeHandle(SQL_HANDLE_STMT, h);
+		}
+	} guard;
+	guard.h = hstmt;
+
+	ret = SQLPrepareW(hstmt, (SQLWCHAR*)sqlW.GetString(), SQL_NTS);
+	if (!SQL_SUCCEEDED(ret)) {
+		SetLastError(OdbcDiagMessage(SQL_HANDLE_STMT, hstmt, ret));
+		return FALSE;
+	}
+
+	std::vector<SQLLEN> ind(paramCount, 0);
+	for (size_t i = 0; i < paramCount; ++i) {
+		ret = BindSqlParam(hstmt, (SQLUSMALLINT)(i + 1), params[i], ind[i]);
+		if (!SQL_SUCCEEDED(ret)) {
+			SetLastError(OdbcDiagMessage(SQL_HANDLE_STMT, hstmt, ret));
+			return FALSE;
+		}
+	}
+
+	ret = SQLExecute(hstmt);
+	if (!SQL_SUCCEEDED(ret)) {
+		SetLastError(OdbcDiagMessage(SQL_HANDLE_STMT, hstmt, ret));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+void CUcRecset::SetLastError(LPCWSTR msg)
+{
+	m_lastError = msg ? msg : L"";
+	DWKFUNCV(L"Error: %v", m_lastError);
+}
+
+#ifdef _DEBUGxx
+UcJObj out;
+rs.ExecuteCommand(
+    L"UPDATE tsessions SET fState='offline' WHERE fEidSessionID='abc'",
+    L"cmd_close_session",   // logicalKey
+    L"update",              // cmdType
+    out);
+//성공 후 out은 대략 이렇게 됩니다 (실제로는 type만 있음):
+
+
+{
+  "cmd_close_session": {
+    "type": "update"
+  }
+}
+#endif // _DEBUGxx
+
+
+CStringW CUcRecset::EscSQL(const CStringW& in)
+{
+	CStringW out(in);
+	out.Replace(L"'", L"''");
+	return out;
+}
+CStringW CUcRecset::SqlQuoted(const CStringW& v)
+{
+	return L"'" + EscSQL(v) + L"'";
+}
+
+BOOL CUcRecset::OpenConnect(LPCTSTR connectString)
+{
+	if (!connectString || !*connectString)
+		return FALSE;
+
+	CString conn(connectString);
+	std::vector<CString> ar;
+	UcCutByToken(conn.GetString(), _T(";"), ar);
+	for (size_t i = 0; i < ar.size(); ++i)
+	{
+		std::vector<CString> ar1;
+		UcCutByToken(ar[i].GetString(), _T("="), ar1);
+		if (ar1.size() < 2)
+			continue;
+		CString key = ar1[0];
+		key.Trim();
+		CString val = ar1[1];
+		val.Trim();
+		if (key.CompareNoCase(_T("DSN")) == 0)
+			m_dsn = val;
+		else if (key.CompareNoCase(_T("UID")) == 0)
+			m_uid = val;
+		else if (key.CompareNoCase(_T("PWD")) == 0)
+			m_pwd = val;
+		else if (key.CompareNoCase(_T("SERVER")) == 0)
+			m_server = val;
+		else if (key.CompareNoCase(_T("DATABASE")) == 0 || key.CompareNoCase(_T("DBQ")) == 0)
+			m_database = val;
+	}
+
+	if (conn.Left(5).CompareNoCase(_T("ODBC;")) == 0 || conn.Find(_T("DRIVER=")) >= 0)
+		SetConnectionString(conn);
+	else
+	{
+		CStringW odbc;
+		odbc.Format(L"ODBC;DSN=%s;UID=%s;PWD=%s", (LPCWSTR)m_dsn, (LPCWSTR)m_uid, (LPCWSTR)m_pwd);
+		SetConnectionString(odbc);
+	}
+	return Open();
+}
+
+void CUcRecset::ClearResult()
+{
+	m_grid.reset();
+	m_colNames.clear();
+	m_rows.clear();
+	m_binCells.clear();
+}
+
+BOOL CUcRecset::LoadGridFromTable(std::shared_ptr<UcJTable> tb)
+{
+	ClearResult();
+	if (!tb)
+		return FALSE;
+	m_grid = tb;
+	const size_t nCols = tb->ColSize();
+	const size_t nRows = tb->RowSize();
+	if (m_maxRow > 0 && (int)nRows > m_maxRow)
+	{
+		// truncate — not implemented for UcJTable slice; use as-is
+	}
+	m_colNames.resize(nCols);
+	m_rows.resize(nRows);
+	m_binCells.resize(nRows);
+	for (size_t c = 0; c < nCols; ++c)
+	{
+		try {
+			auto shFo = tb->_fields->Arr()->GetAt((int)c);
+			if (shFo && shFo->IsDic())
+				m_colNames[c] = shFo->Dic()->S(L"name");
+			else
+				m_colNames[c].Format(L"col%d", (int)c + 1);
+		}
+		catch (...) {
+			m_colNames[c].Format(L"col%d", (int)c + 1);
+		}
+	}
+	for (size_t r = 0; r < nRows; ++r)
+	{
+		m_rows[r].resize(nCols);
+		m_binCells[r].resize(nCols);
+		for (size_t c = 0; c < nCols; ++c)
+		{
+			try {
+				m_rows[r][c] = tb->CellS(c, r);
+			}
+			catch (...) {
+				m_rows[r][c].Empty();
+			}
+		}
+	}
+	return TRUE;
+}
+
+BOOL CUcRecset::DoQuery(LPCWSTR sql)
+{
+	auto tb = QueryToTableJson(sql);
+	if (!tb)
+		return FALSE;
+	return LoadGridFromTable(tb);
+}
+
+BOOL CUcRecset::DoSql(LPCWSTR sql)
+{
+	if (!sql || !*sql)
+		return FALSE;
+	CStringW s(sql);
+	s.TrimLeft();
+	if (s.Left(6).CompareNoCase(L"select") == 0 || s.Left(4).CompareNoCase(L"with") == 0)
+		return DoQuery(sql);
+	ClearResult();
+	return ExecuteCommand(sql);
+}
+
+BOOL CUcRecset::DoSqlFmt(LPCTSTR fmt, ...)
+{
+	CString buf;
+	va_list args;
+	va_start(args, fmt);
+	buf.FormatV(fmt, args);
+	va_end(args);
+	return DoSql(buf);
+}
+
+BOOL CUcRecset::DoSqlVarInsert(LPCWSTR sql, LPCVOID data, SQLLEN cbLen,
+	SQLSMALLINT cType, SQLSMALLINT sqlType)
+{
+	UcSqlParamBinary bin;
+	bin.data = data;
+	bin.cbLen = cbLen;
+	bin.cType = cType;
+	bin.sqlType = sqlType;
+	return ExecuteCommandWithParams(sql, { { UcSQL_BINARY, &bin } });
+}
+
+int CUcRecset::GetColCount() const
+{
+	return (int)m_colNames.size();
+}
+
+SDWORD CUcRecset::GetRowCount() const
+{
+	return (SDWORD)m_rows.size();
+}
+
+LPCTSTR CUcRecset::GetCellStr(int col, int row) const
+{
+	if (col < 0 || row < 0 || row >= (int)m_rows.size())
+		return _T("");
+	if (col >= (int)m_rows[row].size())
+		return _T("");
+	return m_rows[row][col];
+}
+
+LPCSTR CUcRecset::GetCellPtr(int col, int row) const
+{
+	m_cellPtrScratch = CW2A(GetCellStr(col, row), CP_UTF8);
+	return m_cellPtrScratch;
+}
+
+int CUcRecset::GetCellInt(int col, int row) const
+{
+	return _wtoi(GetCellStr(col, row));
+}
+
+LONG CUcRecset::GetCellLong(int col, int row) const
+{
+	return (LONG)_wtol(GetCellStr(col, row));
+}
+
+double CUcRecset::GetCellDouble(int col, int row) const
+{
+	return _wtof(GetCellStr(col, row));
+}
+
+CUcDbCol CUcRecset::GetCol(int col) const
+{
+	CUcDbCol c;
+	const int nRows = (int)m_rows.size();
+	for (int r = 0; r < nRows; ++r)
+	{
+		if (col >= 0 && col < (int)m_rows[r].size())
+		{
+			if (r < (int)m_binCells.size() && col < (int)m_binCells[r].size()
+				&& !m_binCells[r][col].empty())
+				c.SetRowBin(r, m_binCells[r][col].data(), (int)m_binCells[r][col].size());
+			else
+				c.SetRow(r, m_rows[r][col]);
+		}
+	}
+	return c;
+}
+
+void CUcRecset::TableDump() const
+{
+	TRACE(_T("--- CUcRecset TableDump %d cols x %d rows ---\n"), GetColCount(), GetRowCount());
+	for (int c = 0; c < GetColCount(); ++c)
+		TRACE(_T("[%d] %s\t"), c, (LPCTSTR)m_colNames[c]);
+	TRACE(_T("\n"));
+	for (int r = 0; r < (int)GetRowCount(); ++r)
+	{
+		for (int c = 0; c < GetColCount(); ++c)
+			TRACE(_T("%s\t"), GetCellStr(c, r));
+		TRACE(_T("\n"));
+	}
+}
+
+BOOL CUcRecset::vDoSQLwithBinary(LPCTSTR sql)
+{
+	return DoSql(CStringW(sql));
+}
+
+BOOL CUcRecset::vDoSQL(LPCTSTR sql)
+{
+	return DoSql(CStringW(sql));
+}
+
+BOOL CUcRecset::vDoSQLVar(LPCTSTR fmt, ...)
+{
+	CString buf;
+	va_list args;
+	va_start(args, fmt);
+	buf.FormatV(fmt, args);
+	va_end(args);
+	return DoSql(buf);
+}
+
+BOOL CUcRecset::vDoSQLVarInsert(LPCTSTR sql, LPCVOID data, SQLLEN cbLen,
+	SQLSMALLINT cType, SQLSMALLINT sqlType)
+{
+	return DoSqlVarInsert(CStringW(sql), data, cbLen, cType, sqlType);
+}
+
+BOOL CUcRecsetCmd::vDoSQL(LPCTSTR sql)
+{
+	if (!m_pDb)
+		return FALSE;
+	CStringW w(sql);
+	w.TrimLeft();
+	if (w.Left(6).CompareNoCase(L"select") == 0 || w.Left(4).CompareNoCase(L"with") == 0)
+		return m_pDb->DoQuery(w);
+	return m_pDb->ExecuteCommand(w);
+}
+
+BOOL CUcRecsetCmd::vDoSQLwithBinary(LPCTSTR sql)
+{
+	return vDoSQL(sql);
+}
+
+BOOL CUcRecsetCmd::vDoSQLVarInsert(LPCTSTR sql, LPCVOID data, SQLLEN cbLen,
+	SQLSMALLINT cType, SQLSMALLINT sqlType)
+{
+	if (!m_pDb)
+		return FALSE;
+	return m_pDb->DoSqlVarInsert(CStringW(sql), data, cbLen, cType, sqlType);
 }

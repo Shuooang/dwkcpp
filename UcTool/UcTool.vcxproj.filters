@@ -127,5 +127,8 @@
     <None Include="UcPragma.inl">
       <Filter>헤더 파일</Filter>
     </None>
+    <None Include="UcStdUsing.inl">
+      <Filter>헤더 파일</Filter>
+    </None>
   </ItemGroup>
 </Project>

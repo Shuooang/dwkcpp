@@ -1121,3 +1121,50 @@ int KLambdaTimer::DoTimerTask(UINT_PTR nIDEvent)
 	return 0;//0: 메시지를 처리했음을 의미 (Windows에게 "이 메시지는 내가 처리했으니 더 이상 처리하지 마라")
 }
 
+#pragma region MemoApp//[
+CTime UcNextDay(CTime t, int ndays)
+{
+	return t + CTimeSpan(ndays, 0, 0, 0);
+}
+
+CTime UcPrevMonth(CTime cTime, int nm)
+{
+	int monthStart = cTime.GetMonth();
+	CTime tTime = cTime;
+	for (int n = 0; n < nm; ++n)
+	{
+		tTime = UcNextDay(tTime, -28);
+		if (monthStart == tTime.GetMonth())
+		{
+			for (; monthStart == tTime.GetMonth();)
+				tTime = UcNextDay(tTime, -1);
+			for (; cTime.GetDay() < tTime.GetDay();)
+				tTime = UcNextDay(tTime, -1);
+		}
+		else
+		{
+			int monthNext = tTime.GetMonth();
+			for (; cTime.GetDay() < tTime.GetDay();)
+			{
+				tTime = UcNextDay(tTime, -1);
+				if (tTime.GetMonth() < monthNext)
+				{
+					tTime = UcNextDay(tTime, 1);
+					break;
+				}
+			}
+			monthStart = tTime.GetMonth();
+		}
+	}
+	return tTime;
+}
+
+CTime UcPrevYear(CTime t, int nm)
+{
+	CTime result(t.GetYear() - nm, t.GetMonth(), t.GetDay(),
+		t.GetHour(), t.GetMinute(), t.GetSecond());
+	if (result.GetMonth() != t.GetMonth())
+		result = UcNextDay(result, -1);
+	return result;
+}
+#pragma endregion//]

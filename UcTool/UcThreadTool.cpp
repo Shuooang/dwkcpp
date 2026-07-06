@@ -147,7 +147,7 @@ void UcStdThreadPool::EnqueueTaskItem(std::function<void()> fncIn, std::shared_p
 	//_tasks.emplace(std::move(fncIn));
 	///람다함수를 부가 작업"을 붙이기 위해 포장한다.즉, 뒤에 종료 신호를 보낸다.
 	auto fncIn2 = [this, fncIn, promise, enqueueTime]() -> void {
-		auto delayMs = GetTickCount() - enqueueTime;
+		auto delayMs = GetTickCount64() - enqueueTime;
 		//std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - enqueueTime);
 		if (delayMs > 500) { // 지연이 500ms 초과 delayMs.count()
 			DWKFUNCV(L"Task delay: %lld ms", delayMs);
@@ -250,3 +250,122 @@ int main() {
 	return 0;
 }
 #endif // _Sample__
+
+void UcThread::StartThread(std::function<void()> job, LPCSTR tag /*= nullptr*/, std::function<void(UcThread*)> onThError /*= nullptr*/, LPCSTR sFile /*= nullptr*/, int nLine /*= 0*/)
+{
+	//if (tag)
+	//	_tag = CStringW(tag).GetString();
+	//if (_tag.empty())
+	//	_break;
+	//DWKFUNCV(L"BEGIN [[[ tag:%v", _tag);
+	ASSERT(!_th.joinable());
+	//if (onThError)
+	//	_onThreadError = onThError;
+	//if (sFile)
+	//	_sFile = sFile;
+	//if (nLine)
+	//	_nLine = nLine; 
+	
+	///?주의: this가 스택변수로, Detatch 하여, 사라졌을 수도 있음. 필요한건 모두 캡쳐해서 넘겨야.
+	_th = std::thread([this, job = std::move(job), onThError = std::move(onThError), tag1 = CStringW(tag), sFile = CStringA(sFile), nLine = nLine]() mutable {
+		// KException이 발생 한 경우 스레드 키로 KException에 보관 해두었다가, 나갈때 제거 한다.
+		// 같은 스레드 니까 여기 블럭에서 쓰거나(예외발생) 제거된다.
+		/// 현재 스레드의 태그를 보관 해두고 KException이 발생 하면 그 태그를 로그에 찍을 수 있게 한다.
+		KException::KExTag d_tag(tag1.GetString());
+		DWKFUNCV(L"dwk:[[[%v", tag1);
+		try {
+			try {
+				job();//job = nullptr;   // 이 경우 mutable 이 필요
+			}
+			UCCATCH_ALL;/// 이것은 rethrow 하기 때문에 다시 try{}catch{}해야 한다.
+			///KException.s_fncExceptionDealer를 채워야 로그 처리가 된다.
+		}
+		catch (...) {
+			//auto stk = UcPrintStack();//이걸로 추적이 안된다.
+			DWKTRACE(L"ERROR ###tag:%v, %v(%v)", tag1, sFile, nLine);
+			if (onThError)
+				onThError(this);
+			_break;
+		}
+		DWKTRACE(L"dwk:]]]%v", tag1);
+		});
+	ASSERT(_th.joinable());
+}
+
+CSyncAutoLock::CSyncAutoLock(CSyncObject* pObject, BOOL bInitialLock,
+	LPCSTR sFile, int iLine, LPCSTR sobj)
+	: CSingleLock(pObject, FALSE)//FALSE 이므로 여기서 Lock안한다.
+	, m_sFile(sFile)
+	, m_iLine(iLine)
+	, m_sObj(sobj)
+{
+
+	auto pCS = static_cast<CUcCriticalSection*>(m_pObject);
+	const CRITICAL_SECTION& sect = pCS->m_sect;
+#ifdef _DEBUG
+	long lc = sect.LockCount;// -1 => lock -2
+	long rc = sect.RecursionCount;// 0,1,2 계속 증가 한다.
+#endif // _DEBUG
+	HANDLE pth = sect.OwningThread;// null -> lock thread id
+	if (bInitialLock)
+		Lock();////constructor 에서 부르므로 virtual 제거. cppcheck
+	m_ull = GetTickCount64();
+
+}
+
+CSyncAutoLock::~CSyncAutoLock()
+{
+
+	ULONGLONG ull = GetTickCount64();
+	DWORD usp = (DWORD)(ull - m_ull);
+	if (usp > 100)
+	{
+		// 		KTrace(L"Unlock\t%u\t%s %s(%d)\n", usp, m_sObj, m_sFile, m_iLine);
+	}
+	auto pObject = static_cast<CUcCriticalSection*>(m_pObject);
+	pObject->Decrease();//m_nLocked--;
+}
+
+
+BOOL CSyncAutoLock::Lock(DWORD dwTimeOut /*= INFINITE*/)
+{
+	auto pCS = static_cast<CUcCriticalSection*>(m_pObject);
+	const CRITICAL_SECTION& sect = pCS->m_sect;
+#ifdef _DEBUG
+	long lc = sect.LockCount;// -1 => lock -2
+	long rc = sect.RecursionCount;// 0,1,2 계속 증가 한다.
+	//void* pth = sect.OwningThread;// null -> lock thread id
+#endif // _DEBUG
+	pCS->Increase(); //m_nLocked++;
+	// 	BOOL b = __super::Lock(dwTimeOut);
+	// 	return b;
+
+	ASSERT(m_pObject != NULL || m_hObject != NULL);
+	ASSERT(!m_bAcquired);
+
+	//	m_bAcquired = m_pObject->Lock(dwTimeOut);
+	///	m_bAcquired = ((CCriticalSection*)pCS)->Lock(dwTimeOut); 이렇게 하면 CCriticalSection::Lock()에서 overrided Lock을 못 부른다.
+	m_bAcquired = pCS->Lock(dwTimeOut);
+	return m_bAcquired;
+}
+
+
+BOOL CSyncAutoLock::Unlock()
+{
+	ASSERT(m_pObject != NULL);
+	if (m_bAcquired)
+		m_bAcquired = !m_pObject->Unlock();
+
+	// successfully unlocking means it isn't acquired
+	return !m_bAcquired;
+}
+
+BOOL CSyncAutoLock::Unlock(LONG lCount, LPLONG lpPrevCount /* = NULL */)
+{
+	ASSERT(m_pObject != NULL);
+	if (m_bAcquired)
+		m_bAcquired = !m_pObject->Unlock(lCount, lpPrevCount);
+
+	// successfully unlocking means it isn't acquired
+	return !m_bAcquired;
+}

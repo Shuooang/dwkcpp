@@ -318,7 +318,7 @@ class CFileArchive
 	: public CArchiveBase
 {
 public:
-	FILE* m_file;
+	FILE* m_file{};
 public:
 	CFileArchive(bool nMode = store)
 		: CArchiveBase(nMode)

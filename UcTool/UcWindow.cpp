@@ -33,6 +33,39 @@ UCTOOLDYNAMIC void UcSetListReportStyle(CListCtrl* pList, DWORD dwStyle, DWORD d
 	// 	m_cList1.SetExtendedStyle(dw1);
 }
 
+void UcSetWindowStyle(HWND hWnd, long style, BOOL bSetBit, bool bEx)
+{
+	long lStyleOld = GetWindowLong(hWnd, bEx ? GWL_EXSTYLE : GWL_STYLE);
+	lStyleOld &= ~style;
+	if (bSetBit)
+		lStyleOld |= style;
+	SetWindowLong(hWnd, bEx ? GWL_EXSTYLE : GWL_STYLE, lStyleOld);
+}
+
+void UcSavePosition()
+{
+	CFrameWnd* wnd = (CFrameWnd*)AfxGetMainWnd();
+	if (wnd == NULL)
+		return;
+
+	CRect rc(0, 0, 400, 300);
+	wnd->GetWindowRect(rc);
+	TCHAR buf[128];
+	int w, h;
+	if (wnd->IsIconic())
+		return;
+	else if (wnd->IsZoomed())
+		return;
+	else
+	{
+		w = rc.Width();
+		h = rc.Height();
+	}
+
+	swprintf_s(buf, _countof(buf), _T("%d,%d,%d,%d"), rc.left, rc.top, w, h);
+	AfxGetApp()->WriteProfileString(_T("POSITION"), _T("X_Y_W_H"), buf);
+}
+
 /// sample
 //UcSetListReportStyle(&m_list, LVS_SHOWSELALWAYS);
 //UcSetListColumn(&m_list, {
@@ -143,6 +176,7 @@ int UcClearSelectedListItem(CListCtrl* pl)
 	return -1;
 }
 
+UCTOOLDYNAMIC
 int UcGetSelectedListItem(CListCtrl* pl)
 {
 	UINT i, uSelectedCount = pl->GetSelectedCount();
@@ -209,6 +243,8 @@ void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable)
 			ctrl->EnableWindow(bEnable);
 	}
 }
+
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable)
 {
 	HWND hpw = NULL;//pw->GetSafeHwnd();
@@ -236,6 +272,7 @@ void UcEnableWindow(CWnd* pw, std::initializer_list<std::pair<int, BOOL>> arIdcB
 		UcEnableWindow(pw, ib.first, ib.second);
 }
 
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, std::initializer_list<int> arIdc, BOOL bEnable)
 {
 	for (auto idc : arIdc)
@@ -334,7 +371,7 @@ int UcFindStrFromListCtrlItemData(CListCtrl* pList, LPCWSTR sData)
 
 
 
-
+UCTOOLDYNAMIC
 SYSTEMTIME UcGetItemDateTime(CDateTimeCtrl* cDate, CDateTimeCtrl* cTime)
 {
 	SYSTEMTIME st{ 0, };
@@ -358,6 +395,7 @@ SYSTEMTIME UcGetItemDateTime(CDateTimeCtrl* cDate, CDateTimeCtrl* cTime)
 	return std::move(st);
 }
 
+UCTOOLDYNAMIC
 void UcSetItemDateTime(SYSTEMTIME st, CDateTimeCtrl* cDate, CDateTimeCtrl* cTime)
 {
 	// 날짜 컨트롤에 날짜 설정
@@ -382,6 +420,8 @@ void UcSetItemDateTime(SYSTEMTIME st, CDateTimeCtrl* cDate, CDateTimeCtrl* cTime
 		cTime->SetTime(&timeOnly);
 	}
 }
+
+
 void UcSimulateDoubleClick(HWND hWnd, int x, int y)
 {
 	// 좌표값을 LPARAM으로 변환
@@ -577,16 +617,22 @@ int UcMonitorDevice()
 
 
 /// background 에서도 메인 윈도우를 가져 올수 있다. AfxGetMainWnd() 사용 하면 안됨
+UCTOOLDYNAMIC CWnd* UcGetMainCWnd()
+{
+	CWnd* pw = nullptr;
+	if (AfxGetApp() && AfxGetApp()->m_pMainWnd &&
+		::IsWindow(AfxGetApp()->m_pMainWnd->GetSafeHwnd()))	{
+		pw = AfxGetApp()->m_pMainWnd;// ->GetSafeHwnd();
+	}
+	return pw;
+}
+
 UCTOOLDYNAMIC HWND UcGetMainWnd()
 {
-	HWND h = nullptr;
-
-	if (AfxGetApp() &&
-		AfxGetApp()->m_pMainWnd &&
-		::IsWindow(AfxGetApp()->m_pMainWnd->GetSafeHwnd()))
-	{
-		h = AfxGetApp()->m_pMainWnd->GetSafeHwnd();
-	}
-	return h;
+	CWnd* pw = UcGetMainCWnd();
+	if(pw)
+		return pw->GetSafeHwnd();
+	return nullptr;
 }
+
 

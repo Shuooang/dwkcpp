@@ -23,7 +23,7 @@ LPCTSTR      UcTimeToString(CString& sTime, bool bSpace, TCHAR cSpDay, TCHAR cSp
 
 //LPCTSTR      UcCTimeToString(CTime cTime, CString& sTime, bool bSpace = true, TCHAR cSpDay = '-', TCHAR cSpTime = ':');
 
-CString UcCTimeToString(CTime t, bool bSpace = true, TCHAR cSpDay = '-', TCHAR cSpTime = ':');
+UCTOOLDYNAMIC CString UcCTimeToString(CTime t, bool bSpace = true, TCHAR cSpDay = '-', TCHAR cSpTime = ':');
 
 COleDateTime UcAlldigitToOleTime(LPCTSTR strData, int flag = 0);
 
@@ -73,6 +73,10 @@ CTime UcStrTimeToLocal(CString strT);
 CString UcStrTimeToLocalStr(CString strT);
 
 CString UcGetCurrentTimeStamp(int bUTC = eCtLocal);
+
+CTime UcNextDay(CTime t, int ndays);
+UCTOOLDYNAMIC CTime UcPrevMonth(CTime t, int nm = 1);
+UCTOOLDYNAMIC CTime UcPrevYear(CTime t, int nm = 1);
 
 inline CString UcSystimeToString(const SYSTEMTIME* psyt, bool bSpace = true, TCHAR cSpDay = '-', TCHAR cSpTime = ':')
 {
@@ -191,6 +195,14 @@ public:
 	///		auto pr = (KTimerParam)pv;//KTimerParam._i, _sid
 	///		TimerWork(0);
 	///	}, 0);
+	/// #KLambdaTimer 1,2,3
+	/// SHP<KLambdaTimer> _timer;
+	/// _timer = NEWSHP(KLambdaTimer, this);
+	/// int count = 6;// count == 0 이면 계속 반복
+	/// _timer->SetTimerLambda("reg", 500, [this, doc](auto ato) {
+	/// 	auto pr = (KTimerParam*)ato;
+	/// 	SetDlgItemText(IDC_STATIC_insert, (pr->_i % 2) == 0 ? L"" : L"사용자 등록 되었습니다.");
+	/// 	}, count, [](auto) {}, __FILE__, __LINE__);
 	virtual void SetTimerLambda(LPCSTR sid, UINT elapsed, function<void(LPVOID)> lmda, int maxCount = 0
 		, function<void(LPVOID)> lmdaFinish = NULL, LPCSTR fnc = NULL, int line = 0
 	)
@@ -248,13 +260,19 @@ public:
 		else// 이미 타이머 작동중인데 또다시 불려졌을때
 			RestartTimer(sid);
 	}
+
+#ifdef _timer_sample_ //#KLambdaTimer 1,2,3
+	SHP<KLambdaTimer> _timer;
+	_timer = NEWSHP(KLambdaTimer, this);
+	int count = 6;// count == 0 이면 계속 반복
+	_timer->SetTimerLambda("reg", 500, [this, doc](auto ato) {
+		auto pr = (KTimerParam*)ato;
+		SetDlgItemText(IDC_STATIC_insert, (pr->_i % 2) == 0 ? L"" : L"사용자 등록 되었습니다.");
+		}, count, [](auto) {}, __FILE__, __LINE__);
+#endif // _timer_sample_ //#KLambdaTimer 1,2,3
+
 	/// sample
 #ifdef _Sample__
-	int count = 3;// count == 0 이면 계속 반복
-	SetTimerLambda("test", 1000, [&](int, LPCSTR) {
-		// do some thing after 1000 msec
-		}, count);
-
 	_tmld.DelayAndRunOnce("delayedJob", 500, [](int, LPCSTR) {
 		// 이 영역 코드는 500 msec 전에 재 호출 되면 이전 호출은 무시 된다.
 		// 아무리 여러번 호출되어도 500 msec 경과 된 마지막 호출때만 실행된다.

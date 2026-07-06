@@ -2,6 +2,8 @@
 
 #include <tuple>
 #include <string>
+#include <vector>
+
 #include "UcExport.inl"//UCTOOLDYNAMIC
 
 // VS2015에서 정의되지 않은 Windows API 오류 상수들 정의
@@ -474,15 +476,17 @@ int UcSelectListItemEx(CListCtrl* pl, int curSel, bool bShow = true);
 //void UcSelectListItem(CListCtrl& pl, int iItem, bool bShow = true);
 void UcSelectListItem(CListCtrl* pl, int iItem, bool bShow = true, int iOp = eLc_None);
 void UcFocusListItem(CListCtrl* pl, int iItem);
-int UcGetSelectedListItem(CListCtrl* pl);
+UCTOOLDYNAMIC int UcGetSelectedListItem(CListCtrl* pl);
 int UcGetSelectedListItem(CListCtrl* pl, CDWordArray& ar);
 int UcGetSelectedCount(CListCtrl* pl);
 int UcClearSelectedListItem(CListCtrl* pl);
 
+UCTOOLDYNAMIC void UcSetWindowStyle(HWND hWnd, long style, BOOL bSetBit = TRUE, bool bEx = false);
+UCTOOLDYNAMIC void UcSavePosition();
 
 void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable = TRUE);
-void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable = TRUE);
-void UcEnableWindow(CWnd* pw, std::initializer_list<int> arIdc, BOOL bEnable = TRUE);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable = TRUE);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, std::initializer_list<int> arIdc, BOOL bEnable = TRUE);
 void UcEnableWindow(CWnd* pw, const int* idc, int cnt, BOOL bEnable = TRUE);
 // idc vs BOOL 각각 쌍으로 하는 경우
 void UcEnableWindow(CWnd* pw, const int* idc, BOOL* bEnable, int cnt);
@@ -491,8 +495,8 @@ BOOL UcIsScrollBarAtBottom(CWnd* pWnd, int hFont = 14);
 
 int UcFindStrFromListCtrlItemData(CListCtrl* pList, LPCWSTR sData);
 
-SYSTEMTIME UcGetItemDateTime(CDateTimeCtrl* cDate, CDateTimeCtrl* cTime);
-void UcSetItemDateTime(SYSTEMTIME st, CDateTimeCtrl* cDate, CDateTimeCtrl* cTime);
+UCTOOLDYNAMIC SYSTEMTIME UcGetItemDateTime(CDateTimeCtrl* cDate, CDateTimeCtrl* cTime);
+UCTOOLDYNAMIC void UcSetItemDateTime(SYSTEMTIME st, CDateTimeCtrl* cDate, CDateTimeCtrl* cTime);
 
 void UcSimulateMouseDoubleClick(int x, int y);
 
@@ -606,3 +610,5 @@ std::shared_ptr<MyMonitorEnumContext> UcGetMonitorInfo();
 UCTOOLDYNAMIC void UcMoveWindowToMonitor(CWnd* pWnd, const MONITORINFOEX& mi);
 
 
+UCTOOLDYNAMIC HWND UcGetMainWnd();
+UCTOOLDYNAMIC CWnd* UcGetMainCWnd();

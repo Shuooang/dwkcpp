@@ -2,7 +2,7 @@
 
 //#include <memory>//static_pointer_cast
 //#include <algorithm>  // 사용되지 않음 - algorithm 함수들 미사용
-//#include <cmath>      // 사용되지 않음 - 수학 함수들 미사용
+#include <cmath>
 //#include <cstdlib>    // 사용되지 않음 - C 표준 라이브러리 함수들 미사용
 //#include <cstring>    // 사용되지 않음 - C 문자열 함수들 미사용
 //#include <iosfwd>     // 사용되지 않음 - iostream 전방 선언 미사용
@@ -26,10 +26,8 @@
 #include <unordered_map>
 #include <set>
 #include <cctype>
-#ifdef _DEBUG
 #include <filesystem>
 #include <mutex>
-#endif
 
 #include <basetsd.h>
 #include <minwindef.h>
@@ -57,15 +55,9 @@ DWKREMINDER("매크로 남발 하지 말자. 비슷한 코드가 반복 되더�
 COleDateTime UcJObj::__base(1980, 1, 1, 0, 0, 0);
 
 
-std::function<BOOL(jstring& k)> UcJObj::_fncFieldCheck;
+UCTOOLDYNAMIC std::function<BOOL(const jstring& k)> UcJObj::_fncFieldCheck;
+UCTOOLDYNAMIC BOOL UcJObj::s_bCheckEachField{ FALSE };
 
-#ifdef _DEBUG
-BOOL UcJObj::s_bSkipFieldCheck{ TRUE };
-#else
-BOOL UcJObj::s_bSkipFieldCheck{ FALSE };
-#endif // _DEBUG
-
-#ifdef _DEBUG
 namespace {
 	std::set<std::wstring> s_sqlBackupFieldNames = {
 		L"type",//CUcRecset::QueryToTableJson
@@ -114,39 +106,35 @@ namespace {
 		//	&& (unsigned char)content[0] == 0xEF && (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF)
 		//	i0 = 3;
 		for (size_t i = i0; i + 2 < len; ++i) {
-			if (content[i] != '`')
+			if (content[(int)i] != '`')
 				continue;
-			if (content[i + 1] != 'f')
+			if (content[(int)i + 1] != 'f')
 				continue;
 			size_t j = i + 2;
 			while (j < len) {
-				wchar_t c = (wchar_t)content[j];
+				wchar_t c = (wchar_t)content[(int)j];
 				if (std::isalnum(c) || c == '_')
 					++j;
 				else
 					break;
 			}
 
-			if (j < len && content[j] == '`' && j > i + 2) {
+			if (j < len && content[(int)j] == '`' && j > i + 2) {
 				std::wstring w;
 				w.reserve(j - (i + 1));
 				for (size_t k = i + 1; k < j; ++k)
-					w += (wchar_t)content[k];
+					w += (wchar_t)content[(int)k];
 				out.insert(std::move(w));
 				i = j;
 			}
 		}
 	}
 
-	void MergeKnownJsonParamFieldNamesInto(std::set<std::wstring>& out)
-	{
-		static const wchar_t* const kExtra[] = {
-			L"fRows", L"fCols", L"fRidRelayId", L"fOcdCode", L"fOTP", L"fMipMyIP",
-			L"fRole", L"fPort",
-		};
-		for (auto p : kExtra)
-			out.insert(p);
-	}
+	//void MergeKnownJsonParamFieldNamesInto(std::set<std::wstring>& out, vector<PWS>& preFields)
+	//{
+	//	for (auto p : preFields)
+	//		out.insert(p);
+	//}
 
 	bool LooksLikeDbHungarianField(const jstring& k)
 	{
@@ -156,7 +144,7 @@ namespace {
 	}
 }//namespace
 
-bool UcJObj::LoadSqlBackupFieldNames(LPCWSTR pathToSqlFile)
+bool UcJObj::LoadSqlBackupFieldNames(vector<PWS>& preFields, LPCWSTR pathToSqlFile)
 {
 	DWKFUNC;
 	s_sqlBackupFieldNames.clear();
@@ -175,12 +163,15 @@ bool UcJObj::LoadSqlBackupFieldNames(LPCWSTR pathToSqlFile)
 	CStringW sqlW = UcUTF8ToWchar(content);
 	CollectBacktickFNamesFromSqlWstr(sqlW, s_sqlBackupFieldNames);
 	//CollectBacktickFNamesFromSqlUtf8(content, s_sqlBackupFieldNames);
-	MergeKnownJsonParamFieldNamesInto(s_sqlBackupFieldNames);
+	//MergeKnownJsonParamFieldNamesInto(s_sqlBackupFieldNames, preFields);
+	for (auto p : preFields)
+		s_sqlBackupFieldNames.insert(p);
+
 	DWKTRACE(L"LoadSqlBackupFieldNames: %v 필드 path=%v", s_sqlBackupFieldNames.size(), pathToSqlFile);
 	return !s_sqlBackupFieldNames.empty();
 }
 
-BOOL UcJObj::FieldCheckAgainstLoadedSqlBackupFields(jstring& k)
+BOOL UcJObj::FieldCheckAgainstLoadedSqlBackupFields(const jstring& k)
 {
 	DWKUSETRACE;
 	if (s_sqlBackupFieldNames.empty())
@@ -189,11 +180,12 @@ BOOL UcJObj::FieldCheckAgainstLoadedSqlBackupFields(jstring& k)
 		return TRUE;
 	if (s_sqlBackupFieldNames.count(k))
 		return TRUE;
-	DWKTRACE(L"dwk: 없는 키 '%v'", k);
-	ASSERT("dwk: 없는 키" == 0);
+#ifdef _DEBUG
+	auto ds = DWKTRACE(L"dwk: 없는 키 '%v'", k);
+	ASSERT("dwk: 없는 키" == 0);//?see: NgsCommon::EnsureUcJObjDebugSqlFieldNamesLoaded
+#endif // _DEBUG
 	return TRUE;
 }
-#endif // _DEBUG
 
 ///                 FUNCTION LINE ERROR   JSON_POS   JSON_LINE   JSON_COLUMN
 std::list<JException> UcJson::s_errors;
@@ -604,6 +596,19 @@ std::wstring JVal::StringifyString(const bool bUnicode, const std::wstring& str,
 	if (tstrfind(str, (L"테스트지사")) != -1)
 		_break;
 #endif // _DEBUG
+	auto appendUnicodeEscape = [&](wchar_t c) {
+		str_out << L"\\u";
+		for (int i = 0; i < 4; i++)
+		{
+			int value = (c >> 12) & 0xf;
+			if (value >= 0 && value <= 9)
+				str_out << (wchar_t)('0' + value);
+			else if (value >= 10 && value <= 15)
+				str_out << (wchar_t)('A' + (value - 10));
+			c <<= 4;
+		}
+	};
+
 	auto iter = str.begin();
 	while (iter != str.end())
 	{
@@ -639,42 +644,26 @@ std::wstring JVal::StringifyString(const bool bUnicode, const std::wstring& str,
 				str_out << L"\\r";
 			else if (chr == L'\t')
 				str_out << L"\\t";//DEL 문자는 이들 제어 문자와는 별개로 \u007F로 표현되어야
-			//else if (chr < L' ')
-			//	str_out += L" ";
-			else if (chr < L' ' || chr > 126)
-			{// space 보다 적은게 뭐지?
+			else if (chr < L' ')
+			{
+				// ESC(0x1B) 등 나머지 제어 문자 — JSON 스펙상 bUnicode 무관 항상 \uXXXX
+				appendUnicodeEscape(chr);
+			}
+			else if (chr > 126)
+			{
 				if (bUnicode)
 				{
 					if (
-						//(L'가' <= chr && chr <= L'힣') ||
 						(L'\uAC00' <= chr && chr <= L'\uD7A3') ||
-						//(L'ᄀ' <= chr && chr <= L'ᇹ') ||
 						(L'\u1100' <= chr && chr <= L'\u1159') ||
-						//(L'À' <= chr && chr <= L'ґ')   ||
-						(L'\u00C0' <= chr && chr <= L'\u0491') ||  // 라틴 문자 및 기타
-						//(L'Ẁ' <= chr && chr <= L'ẅ')   ||
-						(L'\u1E80' <= chr && chr <= L'\u1E85') ||  // 라틴 확장 문자
-						//(L'Ỳ' <= chr && chr <= L'ỳ')|| // 여기까지 굴림
-						(L'\u1EF2' <= chr && chr <= L'\u1EF3') ||  // 라틴 확장 문자
-						//(L'Ḁ' <= chr && chr <= L'ῼ') // arial
-						(L'\u1E00' <= chr && chr <= L'\u1FFC')     // 라틴 확장 문자
+						(L'\u00C0' <= chr && chr <= L'\u0491') ||
+						(L'\u1E80' <= chr && chr <= L'\u1E85') ||
+						(L'\u1EF2' <= chr && chr <= L'\u1EF3') ||
+						(L'\u1E00' <= chr && chr <= L'\u1FFC')
 						)
-						str_out << chr;// L"\\u";ỳỲỳ  Ḁῼﷺ
-					// 						else if(L'ㄱ' <= chr && chr <= L'ㅣ')
-					// 							str_out << chr;// L"\\u";
+						str_out << chr;
 					else
-					{
-						str_out << L"\\u";
-						for (int i = 0; i < 4; i++)
-						{
-							int value = (chr >> 12) & 0xf;
-							if (value >= 0 && value <= 9)
-								str_out << (wchar_t)('0' + value);
-							else if (value >= 10 && value <= 15)
-								str_out << (wchar_t)('A' + (value - 10));
-							chr <<= 4;
-						}
-					}
+						appendUnicodeEscape(chr);
 				}
 				else
 					str_out << chr;
@@ -1563,12 +1552,17 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 			case L'u':
 			{
 				// We need 5 chars (4 hex + the 'u') or its not valid
+				try{
 				if (!HasMinLengthW(*data, 5))
 				{
 					// JSON 라인 번호 계산
 					int jsonLine, jsonColumn;
 					CalculateJsonLineColumn(*data, startPos, jsonLine, jsonColumn);
-					throw std::make_tuple(__FUNCTION__, __LINE__, "/u#### no number.", *data, jsonLine, jsonColumn);
+					throw JException(__FUNCTION__, __LINE__, "/u#### no number.", std::wstring(*data), jsonLine, jsonColumn);
+				}
+				}
+				catch (...){
+					TRACE("here\n");
 				}
 
 				// Deal with the chars
@@ -1593,7 +1587,7 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 						// Invalid hex digit = invalid Json
 						int jsonLine, jsonColumn;
 						CalculateJsonLineColumn(*data, startPos, jsonLine, jsonColumn);
-						throw std::make_tuple(__FUNCTION__, __LINE__, "Invalid hex digit.", *data, jsonLine, jsonColumn);
+						throw JException(__FUNCTION__, __LINE__, "Invalid hex digit.", std::wstring(*data), jsonLine, jsonColumn);
 					}
 				}
 				break;
@@ -1604,7 +1598,7 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 			{
 				int jsonLine, jsonColumn;
 				CalculateJsonLineColumn(*data, startPos, jsonLine, jsonColumn);
-				throw std::make_tuple(__FUNCTION__, __LINE__, "'\\': only the above cases are allowed.", *data, jsonLine, jsonColumn);
+				throw JException(__FUNCTION__, __LINE__, "'\\': only the above cases are allowed.", std::wstring(*data), jsonLine, jsonColumn);
 			}
 			}
 		}
@@ -1613,7 +1607,7 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 		else if (next_char == L'"')
 		{
 			(*data)++;
-			str.reserve(); // Remove unused capacity
+			//str.reserve(); //?error in c++20 Remove unused capacity
 			return true;
 		}
 
@@ -1627,7 +1621,7 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 			{
 				int jsonLine, jsonColumn;
 				CalculateJsonLineColumn(*data, startPos, jsonLine, jsonColumn);
-				throw std::make_tuple(__FUNCTION__, __LINE__, "Invalid control character.", *data, jsonLine, jsonColumn);
+				throw JException(__FUNCTION__, __LINE__, "Invalid control character.", std::wstring(*data), jsonLine, jsonColumn);
 			}
 		}
 
@@ -1641,7 +1635,7 @@ bool UcJson::ExtractString(const wchar_t** data, wstring& str, const wchar_t* st
 	// If we're here, the string ended incorrectly 맨뒤에 , 컴마가 붙었을 때
 	int jsonLine, jsonColumn;
 	CalculateJsonLineColumn(*data, startPos, jsonLine, jsonColumn);
-	throw std::make_tuple(__FUNCTION__, __LINE__, "the string or brace ended incorrectly.", *data, jsonLine, jsonColumn);
+	throw JException(__FUNCTION__, __LINE__, "the string or brace ended incorrectly.", std::wstring(*data), jsonLine, jsonColumn);
 }
 
 double UcJson::ParseInt(const wchar_t** data)
@@ -1790,6 +1784,31 @@ void UcJObj::ErrTest()
 	auto an1y = jo->O("any");
 }
 
+namespace {
+
+constexpr int kIsUpdatedNumericDecimalPlaces = 9;
+
+/// JVal 은 wstring(___) 에 저장. AsDouble() 은 stod 로 파싱한다.
+/// 소수 decimalPlaces 자리까지 반올림하면 같으면 동일 (tolerance = 0.5 * 10^-places).
+bool JValNumericEqual(double a, double b, int decimalPlaces = kIsUpdatedNumericDecimalPlaces)
+{
+	if (!std::isfinite(a) || !std::isfinite(b))
+		return a == b;
+	if (decimalPlaces < 0)
+		return std::fabs(a - b) < 1e-9;
+	const double tol = 0.5 * std::pow(10.0, -decimalPlaces);
+	return std::fabs(a - b) < tol;
+}
+
+bool JValNumericEqual(JVal* a, JVal* b, int decimalPlaces = kIsUpdatedNumericDecimalPlaces)
+{
+	if (!a || !b)
+		return false;
+	return JValNumericEqual(a->AsDouble(), b->AsDouble(), decimalPlaces);
+}
+
+} // namespace
+
 /// 길이가 있고 내용이 같은 경우만 true 이다.
 int UcJObj::IsUpdated(JBase& src, JBase& tar, JKEYSTR tarF, JKEYSTR srcF)
 {
@@ -1807,15 +1826,21 @@ int UcJObj::IsUpdated(UcJObj& src, UcJObj& tar, JKEYSTR tarF, JKEYSTR srcF)
 	if (src.Has(srf))//this->find(k) != this->end())
 	{
 		auto sjvS = src[srf];
-		if (sjvS->Val()->IsDouble())
+		if (sjvS->Val()->IsNumber())
 		{
-			auto ds = sjvS->Val()->AsDouble();
+			const auto& s = sjvS->Val()->AsString();
 			if (tar.Has(srf))
 			{
 				auto sjvT = tar[taf];
-				auto t = sjvT->Val()->AsString();
-				auto dt = sjvT->Val()->AsDouble();
-				return ds == dt ? 0 : 1;// 내용 같다. : 변경 되었다.
+				const auto& t = sjvT->Val()->AsString();
+				if (s.empty() && t.empty())
+					return -2;
+				if (s.empty())
+					return -1;
+				if (t.empty())
+					return 1;
+				// wstring 저장값을 AsDouble(stod)로 파싱 후 소수 자릿수 tolerance 비교
+				return JValNumericEqual(sjvS->Val(), sjvT->Val()) ? 0 : 1;
 			}
 			else
 				return -1;
@@ -2175,20 +2200,6 @@ LPCWSTR UcJObj::LenS(JKEYSTR k, CStringW& sv)
 	return NULL;
 }
 
-size_t UcJObj::Length(JKEYSTR k)
-{
-	ShJVal sjv;
-	CStringW kw(k);
-	if (Lookup(k, sjv))
-	{
-		ASSERT(!sjv->Val()->IsArray() && !sjv->Val()->IsObject());
-		//if (sjv->Val()->IsString()) 어차피 IsNull이나 숫자이거나 공백이면 Length는 0인거지.
-		const wstring& ws = sjv->Val()->StrRef();
-		return ws.size();
-	}
-	return 0;
-}
-
 /// <summary>
 /// 
 /// </summary>
@@ -2222,9 +2233,11 @@ CStringA JVal::SA(LPCSTR def)/// const : _bufa 때문에 const를 못쓴다.
 {
 	//CStringA& sbufA = _bufa.GetBuf();
 	CStringW defw(def);
-	auto sw = S(defw);
-	CStringA sbufA(sw);
-	return sbufA;
+	//auto sw = S(defw);
+	if (___.length() == 0)
+		return {};
+	return CStringA(___.c_str());
+	//return sbufA;
 	//if (def)
 	//{
 	//	sbufA = S(defw);
@@ -2832,7 +2845,7 @@ std::wstring UcJObj::ToJsonStringWStr(int lvPreety /*= 2*/, function<int(LPCWSTR
 	/// 여기서 JVal jsv(*jov) 하고 아래에서 없어지면서 안데 object도 날려 버리기 때문에 모든 문제가 생겼다.
 	JVal jsv;
 	jsv.ShareObj(*this);// JVal 함수를 쓰려고, 잠시 참조한다.
-	std::wstring temp = jsv.Stringify(false, lvPreety, NULL, NULL, cbChk); // std::wstring으로 받기
+	std::wstring temp = jsv.Stringify(true, lvPreety, NULL, NULL, cbChk); // std::wstring으로 받기
 	return temp;
 }
 
@@ -3213,7 +3226,7 @@ void UcJson::ThrowJsonWithLineInfo(const char* function, int line, const string&
 {
 	// SkipWhitespace에서 이미 tr->_jsonLine과 tr->_jsonColumn을 업데이트하고 있으므로
 	 //auto tp = std::make_tuple(function, line, message, jsonPos, tr->_jsonLine, tr->_jsonColumn);
-	 /// 이렇게 하면 catch(std::tuple<char const *,int,std::string,wchar_t const *,int,int> ) 이렇게 해야 되거든. 
+	 /// 이렇게 하면 catch (std::tuple<char const *,int,std::string,wchar_t const *,int,int> ) 이렇게 해야 되거든. 
 	 //auto tp = std::make_tuple(std::string(function), line, std::string(message), std::wstring(jsonPos), tr->_jsonLine, tr->_jsonColumn); //OK 
 	 /// catch (std::tuple<string, int, string, wstring, int, int>& stp) 랑 타입을 정확히 맞춰야 한다.
 	 //throw tp;
@@ -3243,6 +3256,21 @@ ShJVal JVal::Parse(shared_ptr<JTrain> tr)
 		if (**data == '"')
 		{
 			wstring str;
+//-	[ptr]	0x0000022579074bf0 {_ppData=0x0000009ef9efd1f8 {0x0000022500eddd52 L""} _len=3981 _cur=0 ...}	JTrain *
+//+	_ppData	0x0000009ef9efd1f8 {0x0000022500eddd52 L""}	const wchar_t * *
+//		_len	3981	unsigned __int64
+//		_cur	0	unsigned __int64
+//+	_pStart	0x0000022500edbe38 L"{\"fRidRelayID\":\"B3F9A02AF37B4B08A2D27166D90A8C0B\",\"msg\":\"OK\",\"result\":\"SUCCESS\"\n  ,\"table\":{\n    \"fields\":[{\"name\":\"fQidRequestID\",\"type\":\"string\"},{\"name\":\"fRidRelayID\",\"type\":\"string\"},{\"name\":\"fFun...	const wchar_t *
+//+	_cb	empty	std::function<int __cdecl(int,int,wchar_t const *)>
+//		_jsonLine	12	int
+//		_jsonColumn	1	int
+			if (tr->_len == 3981 && 
+				tr->_cur == 0 &&
+				tchncmp(tr->_pStart, LR"({"fRidRelayID")", 14) == 0 &&
+				tr->_jsonLine == 12 &&
+				tr->_jsonColumn == 1
+				)
+				_break;
 			if (!UcJson::ExtractString(&(++(*data)), str, tr->_pStart))
 				throw_json_with_train("ExtractString", *data, tr);//에서 직접 throw하므로 여기 안온다.
 			else
@@ -3458,20 +3486,9 @@ ShJVal JVal::Parse(shared_ptr<JTrain> tr)
 				tr->Check(data);
 				ShJVal sjv = Parse(tr);/// throw하니 또 throw 하면 안되.
 				if (!sjv)
-					return sjv;
-				/// 여기서 또 throw 하면 이중으로 쌓임. throw_json_with_train("Parse returns empty value.", *data, tr);
-#ifdef _DEBUG
-				CString sData(*data, 50);
-				TRACE(L"%s\n", sData);
-				if (sjv->IsDic())
-					_break;
-				auto pjv = sjv->Val();
-				auto pjb = sjv->Dic();
-				//auto pja = sjv->Arr(); throw
-#endif // _DEBUG
+					return {};
 				// Add the value
 				jarr->Add(sjv, false);
-				//jarr->push_back(sjv);
 
 				// More whitespace?
 				UcJson::SkipWhitespaceThrow(data, tr);
@@ -3499,11 +3516,16 @@ ShJVal JVal::Parse(shared_ptr<JTrain> tr)
 	}
 	catch (KException* e)
 	{
-		TRACE("throw_str: %s[%s]\n", e->m_strStateNativeOrigin, e->_stack);
+		TRACE(L"throw_str: %s[%s]\n", e->m_strStateNativeOrigin, e->_stack);
 	}
-	catch (int eline)
+	catch(CException* e)
 	{
-		TRACE("%d line JSON parsing error.\n", eline);
+		CString serr;
+		TRACE(L"%d line JSON parsing error.\n", e->GetErrorMessage(serr.GetBuffer(512), 512));
+	}
+	catch(std::exception e)
+	{
+		TRACE("std::exception: %s\n", e.what());
 	}
 	catch (const JException& ex)
 	{
@@ -3514,11 +3536,92 @@ ShJVal JVal::Parse(shared_ptr<JTrain> tr)
 #endif // _DEBUG
 		UcJson::PushErr(ex);
 	}
-	catch (...) {
-		JException ex(__FUNCTION__, __LINE__, "Unknown Error", L"", 0, 0);
-		UcJson::PushErr(ex); ASSERT(0);
+	catch (const std::tuple<const char*, int, const char*, const wchar_t*, int, int>& stp)
+	{
+		auto [fnc, errLine, msg, jsonPos, jsonLine, jsonColumn] = stp;
+		JException ex(
+			fnc ? fnc : __FUNCTION__,
+			errLine,
+			msg ? msg : "Tuple parse error",
+			jsonPos ? jsonPos : L"",
+			jsonLine,
+			jsonColumn
+		);
+#ifdef _DEBUG
+		CStringW sw(ex.message.c_str());
+		TRACE(L"%d line JSON parsing error:%s. JSON Line:%d, Column:%d\n", ex.line, sw, ex.jsonLine, ex.jsonColumn);
+#endif // _DEBUG
+		UcJson::PushErr(ex);
 	}
-	return ShJVal();//(int)__LINE__ cast를 해야 한다. 
+	catch (const std::tuple<string, int, string, wstring, int, int>& stp)
+	{
+//#define throw_json_with_train(s, j, tr) UcJson::ThrowJsonWithLineInfo
+		//UcJson::ThrowJsonWithLineInfo
+		auto [fnc, errLine, msg, jsonPos, jsonLine, jsonColumn] = stp;
+		JException ex(
+			fnc,
+			errLine,
+			msg,
+			jsonPos,
+			jsonLine,
+			jsonColumn
+		);
+#ifdef _DEBUG
+		CStringW sw(ex.message.c_str());
+		TRACE(L"%d line JSON parsing error:%s. JSON Line:%d, Column:%d\n", ex.line, sw, ex.jsonLine, ex.jsonColumn);
+#endif // _DEBUG
+		UcJson::PushErr(ex);
+	}
+	catch (LPCWSTR eline)
+	{
+		TRACE("%s JSON parsing error.\n", eline);
+	}
+	catch (LPCSTR eline)
+	{
+		TRACE("%s JSON parsing error.\n", eline);
+	}
+	catch (int eline)
+	{
+		TRACE("%d line JSON parsing error.\n", eline);
+	}
+	catch (long eline)
+	{
+		TRACE("%d line JSON parsing error.\n", eline);
+	}
+	catch (...) {
+		// catch-all에 들어오면 실제 타입을 한 번 더 분해해서 원인 손실을 막는다.
+		try {
+			throw;
+		}
+		catch (const std::tuple<const char*, int, const char*, const wchar_t*, int, int>& stp2)
+		{
+			auto [fnc, errLine, msg, jsonPos, jsonLine, jsonColumn] = stp2;
+			JException ex(
+				fnc ? fnc : __FUNCTION__,
+				errLine,
+				msg ? msg : "Tuple parse error (rethrown)",
+				jsonPos ? jsonPos : L"",
+				jsonLine,
+				jsonColumn
+			);
+			UcJson::PushErr(ex);
+		}
+		catch (const std::tuple<string, int, string, wstring, int, int>& stp2)
+		{
+			auto [fnc, errLine, msg, jsonPos, jsonLine, jsonColumn] = stp2;
+			JException ex(fnc, errLine, msg, jsonPos, jsonLine, jsonColumn);
+			UcJson::PushErr(ex);
+		}
+		catch (const JException& ex2)
+		{
+			UcJson::PushErr(ex2);
+		}
+		catch (...) {
+			JException ex(__FUNCTION__, __LINE__, "Unknown Error", L"", 0, 0);
+			UcJson::PushErr(ex); ASSERT(0);
+		}
+	}
+	return {};// ShJVal();//(int)__LINE__ cast를 해야 한다. 
 }
 
 JVal::JVal()
@@ -5162,19 +5265,22 @@ ShJObj UcJObj::MergeJsonObj(ShJObj parent, ShJObj child)
 	return result;
 	}
 
-SHP<UcJTable> UcJObj::Table(UcJObj* pbj) //dwk: 2026-03-25 15:10
+//SHP<UcJTable> UcJObj::Table(UcJObj* pbj) //dwk: 2026-03-25 15:10
+SHP<UcJTable> UcJObj::Table(ShJVal shTbl2) //dwk: 2026-03-25 15:10
 {
-	if (pbj == nullptr)
+	if(!shTbl2)
+	//if (pbj == nullptr)
 		throw_str(L"pbj is null.");
 
-	auto tb = NEWSHP(UcJTable);
-	tb->_tbl = pbj;
-
-	CStringW ty = tb->_tbl->S(L"type", L"");
+	auto tb = NEWSHP(UcJTable);				//+pbj	[L"fields"]	{_type=eArr 
+	tb->_tbl = shTbl2;// pbj;// 							//+		[L"rows"]	{_type=eArr 
+														//-		[L"type"]	{_type=eStr L"table"
+	auto tblObj = tb->_tbl->Dic();
+	CStringW ty = tblObj->S(L"type", L"");
 	if (ty != L"table")
 		throw_str(L"UcJObj::Cell table type must be \"table\" (got \"%s\").", ty.GetString());
-	tb->_fields = tb->_tbl->A(L"fields", false);
-	tb->_rows = tb->_tbl->A(L"rows", false);
+	tb->_fields = tblObj->A(L"fields", false);
+	tb->_rows = tblObj->A(L"rows", false);
 	if (!tb->_fields)
 		throw_str(L"UcJObj::Cell table missing \"fields\" array.");
 	if (!tb->_rows)
@@ -5304,7 +5410,8 @@ int UcJsonLoad(ShJBase & jDocData, CFile & oFile, function<int(int, int, LPCWSTR
 /// <param name="len"></param>
 /// <param name="cb"></param>
 /// <returns></returns>
-int UcJsonLoad(ShJBase & jDocData, LPCSTR psUtf8, DWORD len, function<int(int, int, LPCWSTR)> cb)
+UCTOOLDYNAMIC
+int UcJsonLoad(ShJBase& jDocData, LPCSTR psUtf8, DWORD len, function<int(int, int, LPCWSTR)> cb)
 {
 	CStringW sWstr;
 	//try
@@ -5361,7 +5468,8 @@ int UcJsonLoad(ShJBase & jDocData, LPCWSTR sWstr, DWORD len, function<int(int, i
 	return 0;
 }
 
-int UcJsonLoad(ShJBase & jDocData, CString sFullJsonFile)
+UCTOOLDYNAMIC
+int UcJsonLoad(ShJBase& jDocData, CString sFullJsonFile)
 {
 	try
 	{  //sFull = L"C:\\Users\\keeps\\AppData\\Local\\ITCKR\\UcRoot\\IK_Patch_stats.json"
@@ -5417,7 +5525,8 @@ int UcJsonLoad(UcJObj & jDocData, CFile & oFile, function<int(int, int, LPCWSTR)
 	}
 	return 0;
 }
-void UcJsonSave(UcJObj & jDocData, CString sFull, BOOL bBackup, int nDayExpire, int preety)
+UCTOOLDYNAMIC
+void UcJsonSave(UcJObj& jDocData, CString sFull, BOOL bBackup, int nDayExpire, int preety)
 {
 	ASSERT(sFull.GetLength() > 0);
 	try

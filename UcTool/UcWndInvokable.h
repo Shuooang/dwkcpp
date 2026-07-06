@@ -7,10 +7,15 @@
 
 #include "UcBaseTools.h"
 #include "UcTool.h"
+#include "UcWindow.h"
 #include "UcTimeTools.h"
+#include "UcThreadTool.h"
 
 #define _UseOnWndMsg
 #define WM_USER_INVOKE (WM_USER+0x4140)
+#ifndef WM_USER_BEGININVOKE
+#define WM_USER_BEGININVOKE WM_USER_INVOKE
+#endif
 
 /// PostMessage뿐만 아니라 SendMessage에도 쓰인다.
 class KBeginInvoke
@@ -95,59 +100,45 @@ LRESULT clss::OnBeginInvoke(WPARAM wParam, LPARAM lParam)\
 #define OnBeginInvoke_Define(clss) OnBeginInvoke_DefineEx(clss, FALSE)
 //auto pLambda = (std::function<void()LPVOID>*)lParam; delete pbi;
 
-UCTOOLDYNAMIC
-void PostMainTask(HWND hw, function<void(LPVOID)> lmda, LPCSTR fnc = NULL, int line = -1, LPCSTR note = NULL, BOOL bAsync = TRUE
-	, function<void(LPVOID)> lmdaFinish = NULL);
-///?example : 매크로 KwBeginInvoke를 쓸때는 람다 부분을 가로로 한번더 싸 줘야 한다.
-//PostMainTask(_wnd, [&, param]()-> void
-//	{
-//		OnBoxSelected(param);
-//	}, __FUNCTION__, __LINE__);
-
-
-/// 내부적으로 SendMessage이므로 결과가 올때 까지 기다린다.
-UCTOOLDYNAMIC
-LRESULT SendMainTask(HWND hw, function<LRESULT(LPVOID)> lmda, LPCSTR fnc = NULL, int line = -1, LPCSTR note = NULL);
-///?example : 매크로 KwBeginInvoke를 쓸때는 람다 부분을 가로로 한번더 싸 줘야 한다.
-// LRESULT rv = SendMainTask(_wnd, [&, param]()-> void
-//	{
-//		OnBoxSelected(param);
-//		return 0;//설계함에 따라 정한 값을 리턴해야 한다.
-//	}, __FUNCTION__, __LINE__);
-
-UCTOOLDYNAMIC
-void PostMainTask(CWnd* pWnd, function<void(LPVOID)> lmda, LPCSTR fnc = NULL, int line = -1, LPCSTR note = NULL, BOOL bAsync = TRUE
-	, function<void(LPVOID)> lmdaFinish = NULL);
-#define POSTMAINTASK(wnd, lmda) PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
-
-///?주의: 아래 합수는 MainWindow가 반드시 윈도우메시지 WM_USER_INVOKE 를 처리하게 해두어야 lmda가 invoke 된다.
-template<typename FNC>
-void PostMainTask(FNC lmda, LPCSTR fnc = NULL, int line = -1, LPCSTR note = NULL, BOOL bAsync = TRUE
-	, function<void(LPVOID)> lmdaFinish = NULL)
-{
-	///?주의: AfxGetMainWnd() 는 현재 스레드의 윈도우를 리턴 함으로서 BG thread인 경우 UI 메인윈도가 아니다.
-	// NULL 이면 AfxGetApp()->GetMainWnd()로 구한다.
-	PostMainTask((CWnd*)NULL, lmda, fnc, line, note, bAsync, lmdaFinish);
-}
-
-UCTOOLDYNAMIC
-LRESULT SendMainTask(CWnd* pWnd, function<LRESULT(LPVOID)> lmda, LPCSTR fnc = NULL, int line = -1, LPCSTR note = NULL);
-
-
 ///?주의: 람다식에서 [&] 는 괜찮은데, [&,val] 처럼 더 들어 가는 경우 람다식 전체를 가로로 더 묶어 줘야 한다.
 ///		이렇게 매크로 사용하면, 람다식 내부에서 line trace debug가 안된다.
+// #define KwBeginInvoke(wnd, lmda) PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+// #define KwSendInvoke(wnd, lmda) SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+// #define KwBeginInvokeNt(wnd, lmda, note) PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__, note)
+// #define KwSendInvokeNt(wnd, lmda, note) SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__, note)
+
+/// @deprecated 람다 매크로는 디버깅이 어렵습니다. PostMainTask / SendMainTask 를 직접 호출하세요.
+///   PostMainTask(wnd, [captures]() { ... }, __FUNCTION__, __LINE__);
+///   SendMainTask(wnd, [captures](LPVOID) -> LRESULT { ... return 0; }, __FUNCTION__, __LINE__);
+#if defined(_MSC_VER)
+#define UC_KW_INVOKE_DEPRECATE_MSG \
+	__pragma(message(__FILE__ ": warning: Kw*Invoke macro is deprecated. Use PostMainTask/SendMainTask directly."))
+#else
+#define UC_KW_INVOKE_DEPRECATE_MSG
+#endif
+
+#define KwBeginInvoke(wnd, lmda) \
+	UC_KW_INVOKE_DEPRECATE_MSG \
+	PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+
+#define KwSendInvoke(wnd, lmda) \
+	UC_KW_INVOKE_DEPRECATE_MSG \
+	SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+
+#define KwBeginInvokeNt(wnd, lmda, note) \
+	UC_KW_INVOKE_DEPRECATE_MSG \
+	PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+
+#define KwSendInvokeNt(wnd, lmda, note) \
+	UC_KW_INVOKE_DEPRECATE_MSG \
+	SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
+
 /*
-#define KwBeginInvoke(wnd, lmda) PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
-#define KwSendInvoke(wnd, lmda) SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__)
-#define KwBeginInvokeNt(wnd, lmda, note) PostMainTask((wnd), (lmda), __FUNCTION__, __LINE__, note)
-#define KwSendInvokeNt(wnd, lmda, note) SendMainTask((wnd), (lmda), __FUNCTION__, __LINE__, note)
 * this: message날릴 윈도우 CWnd*
 * i,sAstrR : 비동기라 스택에서 사라질 변수를 복사해 전달 한다.
-	KwBeginInvoke(this, ([&, i, sAstrR]()-> void
-		{
-			UiForAsync(i, sAstrR);
-		}));//?beginInvoke 4
-
+	PostMainTask(this, [i, sAstrR]() {
+		UiForAsync(i, sAstrR);
+	}, __FUNCTION__, __LINE__);
 */
 
 class UCTOOLDYNAMIC CSizeAdjustable
@@ -423,6 +414,29 @@ protected:
 // ========================================
 // PostMainTask 기능을 CWnd 상속 없이 사용하는 최소한의 코드
 // ========================================
+#define _UseInvoke_Helper_
+#ifdef _UseInvoke_Helper_
+
+INLINE_STATIC constexpr LPCWSTR kPostMainTaskPropKey = L"NGS_PostMainTask_Enabled";
+
+inline void UcMarkPostMainTaskWindow(HWND hwnd)
+{
+	if (!::IsWindow(hwnd))
+		return;
+	if (!::GetPropW(hwnd, kPostMainTaskPropKey))
+		::SetPropW(hwnd, kPostMainTaskPropKey, (HANDLE)1);
+}
+
+inline bool UcIsPostMainTaskWindow(HWND hwnd)
+{
+	return ::IsWindow(hwnd) && (::GetPropW(hwnd, kPostMainTaskPropKey) != nullptr);
+}
+
+inline void UcUnmarkPostMainTaskWindow(HWND hwnd)
+{
+	if (::IsWindow(hwnd))
+		::RemovePropW(hwnd, kPostMainTaskPropKey);
+}
 
 /// PostMainTask 기능을 CWnd 상속 없이 사용할 수 있는 헬퍼 클래스
 class CPostMainTaskHelper
@@ -460,6 +474,12 @@ public:
 			TRACE("PostMainTask: Window is gone.\n");
 			return;
 		}
+		if (!UcIsPostMainTaskWindow(hwnd))
+		{
+			TRACE("PostMainTask: target window is not configured for invoke. Add OVERRIDE_WINDOWPROC_FOR_ALL/POSTMAINTASK.\n");
+			ASSERT(!"PostMainTask target has no OVERRIDE_WINDOWPROC_FOR_ALL/POSTMAINTASK");
+			return;
+		}
 
 		LambdaData* pData = new LambdaData(lambda, fnc, line, hwnd);
 		s_srl++;
@@ -473,6 +493,12 @@ public:
 		if (!::IsWindow(hwnd))
 		{
 			TRACE("SendMainTask: Window is gone.\n");
+			return 0;
+		}
+		if (!UcIsPostMainTaskWindow(hwnd))
+		{
+			TRACE("SendMainTask: target window is not configured for invoke. Add OVERRIDE_WINDOWPROC_FOR_ALL/POSTMAINTASK.\n");
+			ASSERT(!"SendMainTask target has no OVERRIDE_WINDOWPROC_FOR_ALL/POSTMAINTASK");
 			return 0;
 		}
 
@@ -561,26 +587,76 @@ private:
 	}
 };
 
+inline BOOL IsPostableWindow(CWnd* pw, BOOL bVisible = FALSE) {
+	return pw && pw->GetSafeHwnd() && ::IsWindow(pw->GetSafeHwnd()) && (!bVisible || pw->IsWindowVisible());
+}
+inline BOOL IsPostableWindow(HWND hWnd, BOOL bVisible = FALSE) {
+	return hWnd && ::IsWindow(hWnd) && (!bVisible || ::IsWindowVisible(hWnd));
+}
+
 // 편의 함수들 (디버깅 가능)
 inline void PostMainTaskSimple(HWND hwnd, std::function<void(LPVOID)> lambda, LPCSTR fnc = nullptr, int line = -1)
 {
-	CPostMainTaskHelper::PostMainTask(hwnd, lambda, fnc, line);
+	if (IsPostableWindow(hwnd)) {
+		ASSERT(UcIsPostMainTaskWindow(hwnd));
+		CPostMainTaskHelper::PostMainTask(hwnd, lambda, fnc, line);
+	}
 }
 
 inline LRESULT SendMainTaskSimple(HWND hwnd, std::function<LRESULT(LPVOID)> lambda, LPCSTR fnc = nullptr, int line = -1)
 {
-	return CPostMainTaskHelper::SendMainTask(hwnd, lambda, fnc, line);
+	if (IsPostableWindow(hwnd)) {
+		ASSERT(UcIsPostMainTaskWindow(hwnd));
+		return CPostMainTaskHelper::SendMainTask(hwnd, lambda, fnc, line);
+	}
+	return {};
 }
 
 // 단순한 편의 함수들 (func, line 파라미터 없음)
-inline void PostMainTask(HWND hwnd, std::function<void(LPVOID)> lambda)
+inline void PostMainTask(HWND hwnd, std::function<void(LPVOID)> lambda, LPCSTR fnc = NULL, int line = -1)
 {
-	CPostMainTaskHelper::PostMainTask(hwnd, lambda, nullptr, -1);
+	if (IsPostableWindow(hwnd)) {
+		ASSERT(UcIsPostMainTaskWindow(hwnd));
+		CPostMainTaskHelper::PostMainTask(hwnd, lambda, fnc, line);
+	}
 }
 
-inline LRESULT SendMainTask(HWND hwnd, std::function<LRESULT(LPVOID)> lambda)
+
+inline void PostMainTask(CWnd* pw, std::function<void(LPVOID)> lambda, LPCSTR fnc = NULL, int line = -1)
 {
-	return CPostMainTaskHelper::SendMainTask(hwnd, lambda, nullptr, -1);
+	//ASSERT(IsPostableWindow(pw)); 앱을 닫을때 온다.
+	if(IsPostableWindow(pw)) {
+		ASSERT(UcIsPostMainTaskWindow(pw->GetSafeHwnd()));
+		CPostMainTaskHelper::PostMainTask(pw->GetSafeHwnd(), lambda, fnc, line);
+	}
+}
+
+inline void PostMainTask(CWnd* pw, std::function<void()> lambda, LPCSTR fnc = NULL, int line = -1)
+{
+	PostMainTask(pw, [lambda](LPVOID) { lambda(); }, fnc, line);
+}
+
+inline LRESULT SendMainTask(HWND hwnd, std::function<LRESULT(LPVOID)> lambda, LPCSTR fnc = nullptr, int line = -1)
+{
+	if (IsPostableWindow(hwnd)) {
+		ASSERT(UcIsPostMainTaskWindow(hwnd));
+		return CPostMainTaskHelper::SendMainTask(hwnd, lambda, fnc, line);
+	}
+	return {};
+}
+
+inline LRESULT SendMainTask(CWnd* pw, std::function<LRESULT(LPVOID)> lambda, LPCSTR fnc = nullptr, int line = -1)
+{
+	if (IsPostableWindow(pw)) {
+		ASSERT(UcIsPostMainTaskWindow(pw->GetSafeHwnd()));
+		return CPostMainTaskHelper::SendMainTask(pw->GetSafeHwnd(), lambda, fnc, line);
+	}
+	return {};
+}
+
+inline LRESULT SendMainTask(CWnd* pw, std::function<LRESULT()> lambda, LPCSTR fnc = nullptr, int line = -1)
+{
+	return SendMainTask(pw, [lambda](LPVOID) -> LRESULT { return lambda(); }, fnc, line);
 }
 
 // this를 명시적으로 받는 버전 (일반 클래스에서 사용)
@@ -588,7 +664,8 @@ template<typename T>
 inline void PostMainTaskSelf(T* pThis, std::function<void(LPVOID)> lambda)
 {
 	static_assert(std::is_base_of_v<CWnd, T>, "T must be derived from CWnd");
-	CPostMainTaskHelper::PostMainTask(pThis->GetSafeHwnd(), lambda, nullptr, -1);
+	if (IsPostableWindow(pThis))
+		CPostMainTaskHelper::PostMainTask(pThis->GetSafeHwnd(), lambda, nullptr, -1);
 }
 
 template<typename T>
@@ -599,16 +676,21 @@ inline LRESULT SendMainTaskSelf(T* pThis, std::function<LRESULT(LPVOID)> lambda)
 }
 
 // CWnd 포인터를 직접 받는 버전 (윈도우 선택 가능)
-inline void PostMainTaskSelf(CWnd* pWnd, std::function<void(LPVOID)> lambda)
-{
-	if (pWnd) CPostMainTaskHelper::PostMainTask(pWnd->GetSafeHwnd(), lambda, nullptr, -1);
-}
+//inline void PostMainTaskSelf(CWnd* pWnd, std::function<void(LPVOID)> lambda)
+//{
+//	if (IsPostableWindow(pWnd))
+//		CPostMainTaskHelper::PostMainTask(pWnd->GetSafeHwnd(), lambda, nullptr, -1);
+//}
 
 inline LRESULT SendMainTaskSelf(CWnd* pWnd, std::function<LRESULT(LPVOID)> lambda)
 {
-	if (pWnd) return CPostMainTaskHelper::SendMainTask(pWnd->GetSafeHwnd(), lambda, nullptr, -1);
+	if (IsPostableWindow(pWnd)) {
+		ASSERT(UcIsPostMainTaskWindow(pWnd->GetSafeHwnd()));
+		return CPostMainTaskHelper::SendMainTask(pWnd->GetSafeHwnd(), lambda, nullptr, -1);
+	}
 	return 0;
 }
+#endif // _UseInvoke_Helper_
 
 // 편의 매크로들 (디버깅이 어려우므로 함수 사용 권장)
 //#define POST_MAIN_TASK(hwnd, lambda) \
@@ -627,6 +709,8 @@ inline LRESULT SendMainTaskSelf(CWnd* pWnd, std::function<LRESULT(LPVOID)> lambd
 #define OVERRIDE_WINDOWPROC_FOR_POSTMAINTASK(BaseClass) \
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
 	{ \
+		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
 		if (message == WM_USER_INVOKE) \
 			return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
 		if (message == WM_TIMER) \
@@ -638,6 +722,8 @@ inline LRESULT SendMainTaskSelf(CWnd* pWnd, std::function<LRESULT(LPVOID)> lambd
 /// 기존 WindowProc override에 메시지 처리만 윗 부분에 삽입하는 매크로 (함수처럼 사용)
 /// message 추가 //dwk: 2025-10-22 10:55:00
 #define ADD_POSTMAINTASK_TO_WINDOWPROC(message) \
+	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
 	if (message == WM_USER_INVOKE) \
 		return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
 	if (message == WM_TIMER)\
@@ -703,6 +789,8 @@ public:
 #define OVERRIDE_WINDOWPROC_FOR_LAMBDATIMER(BaseClass) \
     virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
     { \
+		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
         if (message == WM_USER_INVOKE) \
             return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
         if (message == WM_TIMER) \
@@ -712,6 +800,8 @@ public:
 
 // 기존 WindowProc override에 타이머 처리만 추가하는 매크로 (함수처럼 사용)
 #define ADD_LAMBDATIMER_TO_WINDOWPROC() \
+	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
     if (message == WM_TIMER) \
         CKLambdaTimerHelper::HandleTimerMessage(this, wParam);
 
@@ -719,6 +809,8 @@ public:
 #define OVERRIDE_WINDOWPROC_FOR_ALL(BaseClass) \
     virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
     { \
+		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
         if (message == WM_USER_INVOKE) \
             return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
         if (message == WM_TIMER) \
@@ -728,6 +820,8 @@ public:
 
 // 기존 WindowProc override에 모든 처리 추가하는 매크로 (함수처럼 사용)
 #define ADD_ALL_TO_WINDOWPROC() \
+	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
     if (message == WM_USER_INVOKE) \
         return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
     if (message == WM_TIMER) \
@@ -934,8 +1028,21 @@ public:
 #define LongTaskStartedIndex(idx, ...) LongTaskStartedRaw(__FUNCTION__, idx, ##__VA_ARGS__)
 
 
+UCTOOLDYNAMIC
+void UcPostMessageBoxError(LPCWSTR fmt, ...);
 
 
+#ifdef _timer_sample_ //#KLambdaTimer 1,2,3
+SHP<KLambdaTimer> _timer;
+
+_timer = NEWSHP(KLambdaTimer, this);
+
+int count = 6;// count == 0 이면 계속 반복
+_timer->SetTimerLambda("reg", 500, [this, doc](auto ato) {
+	auto pr = (KTimerParam*)ato;
+	SetDlgItemText(IDC_STATIC_insert, (pr->_i % 2) == 0 ? L"" : L"사용자 등록 되었습니다.");
+	}, count, [](auto) {}, __FILE__, __LINE__);
+#endif // _timer_sample_ //#KLambdaTimer 1,2,3
 
 
 

@@ -2,8 +2,7 @@
 //
 
 #include "pch.h"
-#include "framework.h"
-#include <sstream>
+//#include "framework.h"
 #include <mutex>
 #include <regex> // for std::wregex
 
@@ -20,10 +19,10 @@
 #include "UcNetwork.h"
 #include "UcDebug.h"
 
-DWKREMINDER("tmplate GSingleton<T>은 모듈마다 만들어 지므로, UCTOOLDYNAMIC GetKTrace() export 된 함수를 따로 만들어야 한다.")
 
 // C++14 호환성을 위한 static 멤버 정의
 #if CPP_BEFORE_17
+DWKREMINDER("tmplate GSingleton<T>은 모듈마다 만들어 지므로, UCTOOLDYNAMIC GetKTrace() export 된 함수를 따로 만들어야 한다.")
 //#pragma message(FILINDWK("C++14 is supported. (Not C++17)"))
 // KException 클래스의 static 멤버들
 std::function<void(KException*)> KException::s_fncExceptionDealer;
@@ -4594,8 +4593,8 @@ PWS UcUTF8ToHtmlUrl(CStringA& sUtf8, CStringW& sWstr)
 	}
 	return sWstr;
 }
-
 #define UCVARFORMAT
+UCTOOLDYNAMIC
 CStringW UcFormatStringFromArgs(LPCWSTR fmt, va_list args) {
 	int size = _vscwprintf(fmt, args) + 1;  // +1 for null terminator
 	CStringW buffer;
@@ -4611,6 +4610,7 @@ CStringW UcMessageBoxStatic::s_title;
 HWND UcMessageBoxStatic::s_hWndParent = NULL;
 
 /// <param name="nType">MB_OK</param>
+UCTOOLDYNAMIC
 int UcMessageBoxGeneral(UINT nType, LPCWSTR fmt, ...)
 {
 	va_list args;
@@ -5784,7 +5784,60 @@ hex(7) : REG_MULTI_SZ 유형을 나타내며, 여러 개의 문자열 데이터�
 hex(b) : REG_QWORD 유형을 나타내며, 64비트 숫자 값을 저장합니다.
 #endif // _DEBUGx
 
+int UcReverseFindStr(const CStringW& s, LPCWSTR needle)
+{
+	const int lenNeedle = (int)wcslen(needle);
+	if (lenNeedle <= 0 || s.GetLength() < lenNeedle)
+		return -1;
+	for (int i = s.GetLength() - lenNeedle; i >= 0; --i)
+		if (s.Mid(i, lenNeedle) == needle)
+			return i;
+	return -1;
+}
 
+CStringW UcMaskConnPwd(const CStringW& conn)
+{
+	static const CStringW keyPwd = L"PWD=";
+	CStringW s(conn);
+	int i = 0;
+	while (i < s.GetLength())
+	{
+		int keyPos = -1;
+		for (int j = i; j + keyPwd.GetLength() <= s.GetLength(); ++j)
+		{
+			if (s.Mid(j, keyPwd.GetLength()).CompareNoCase(keyPwd) == 0)
+			{
+				keyPos = j;
+				break;
+			}
+		}
+		if (keyPos < 0)
+			break;
+
+		const int valStart = keyPos + keyPwd.GetLength();
+		int valEnd = valStart;
+		const bool braced = (valStart < s.GetLength() && s[valStart] == L'{');
+		if (braced)
+		{
+			valEnd = s.Find(L'}', valStart);
+			if (valEnd < 0)
+				valEnd = s.GetLength();
+			else
+				++valEnd;
+		}
+		else
+		{
+			while (valEnd < s.GetLength() && s[valEnd] != L';')
+				++valEnd;
+		}
+
+		const CStringW masked = braced ? L"{***}" : L"***";
+		s.Delete(valStart, valEnd - valStart);
+		s.Insert(valStart, masked);
+		i = valStart + masked.GetLength();
+	}
+	return s;
+}
 
 CStringW UcShortLambdaName(CStringW sFnc)
 {
@@ -6031,7 +6084,102 @@ BOOL UcCopyTextClipboad(LPCWSTR text, HWND hwnd)  // CWnd* pWnd)
 	}
 	return FALSE;
 }
+#pragma region MemoApp//[
+BOOL UcCopyTextClipboad(CWnd* pWnd, LPCWSTR text)
+{
+	if (!pWnd)
+		pWnd = CWnd::GetDesktopWindow();
+	return UcCopyTextClipboad(text, pWnd->GetSafeHwnd());
+}
 
+BOOL UcPasteTextClipboard(CWnd* pWnd, CString& str)
+{
+	HANDLE hData = 0;
+	if (pWnd == NULL)
+		pWnd = CWnd::GetDesktopWindow();
+
+	if (::OpenClipboard(pWnd->GetSafeHwnd()))
+	{
+		if (::IsClipboardFormatAvailable(CF_UNICODETEXT))
+			hData = ::GetClipboardData(CF_UNICODETEXT);
+		else if (::IsClipboardFormatAvailable(CF_TEXT))
+			hData = ::GetClipboardData(CF_TEXT);
+		else
+		{
+			::CloseClipboard();
+			return FALSE;
+		}
+		::CloseClipboard();
+		if (hData)
+		{
+			LPVOID lp = GlobalLock(hData);
+			if (lp)
+			{
+				if (::IsClipboardFormatAvailable(CF_UNICODETEXT))
+					str = (LPCWSTR)lp;
+				else
+					str = (LPCSTR)lp;
+				GlobalUnlock(hData);
+				if (str.GetLength())
+					return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
+
+int UcGetFileName(CString& cstr, UINT id, CWnd* pParent, BOOL bOpen)
+{
+	CString ext;
+	if (ext.LoadString(id))
+		return UcGetFileName(cstr, ext, pParent, bOpen);
+	return IDCANCEL;
+}
+
+int UcGetFileName(CString& cstr, LPCTSTR ext, CWnd* pParent, BOOL bOpen)
+{
+	CFileDialog fdlg(bOpen, NULL, NULL, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
+		ext, pParent);
+	if (fdlg.DoModal() == IDOK)
+	{
+		cstr = fdlg.GetPathName();
+		return IDOK;
+	}
+	return IDCANCEL;
+}
+
+void UcSeparatePathFile(CString& full, CString& path, CString& file)
+{
+	auto pr = UcCutToFolderAndFile(full);
+	path = pr.first;
+	file = pr.second;
+	if (path.GetLength() && path[path.GetLength() - 1] != _T('\\'))
+		path += _T('\\');
+}
+
+void UcCheckMessage(DWORD dw, int period)
+{
+	if (dw % period)
+		return;
+	MSG msg;
+	if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+}
+
+void UcAutoMessageBox(CWnd* pWnd, LPCTSTR msg, UINT delayMs)
+{
+	if (pWnd)
+		pWnd->MessageBox(msg, AfxGetAppName(), MB_OK | MB_ICONINFORMATION);
+	else
+		AfxMessageBox(msg, MB_OK | MB_ICONINFORMATION);
+	if (delayMs > 0)
+		UcReady((long)(delayMs / 10 + 1));
+}
+
+#pragma endregion//]MemoApp
 
 #pragma region Psapi
 #include <Psapi.h>
@@ -8279,4 +8427,20 @@ CString UcGetAbsolutePath(LPCTSTR szRelative)
 	strFull.ReleaseBuffer();
 	return strFull; // 👍 dwRet == 0 이면 strFull == ""
 }
+#ifdef _build_errror 
+#include "UcWndInvokable.h"
+//1>C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC\14.44.35207\atlmfc\include\atlpath.h(60,11): error C4995: 'PathAddExtensionA': 이름이 #pragma deprecated로 표시되었습니다.
+/// 그래서 TcWndInvokable.cpp로 옮김
+UCTOOLDYNAMIC
+void UcPostMessageBoxError(LPCWSTR fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	CStringW sMsg = UcFormatStringFromArgs(fmt, args);
+	va_end(args);
+	PostMainTaskSelf(UcGetMainCWnd(), [sMsg](auto) {
+		UcMessageBoxError(sMsg);
+		});
+}
 
+#endif // _build_errror

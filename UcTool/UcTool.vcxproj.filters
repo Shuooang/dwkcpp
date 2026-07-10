@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="OldCode">
+      <UniqueIdentifier>{a23c02da-2c13-42a4-b195-c57befdefed8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -69,6 +72,27 @@
     <ClInclude Include="UcJXBase.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="OldTool\ATMSGBOX.H">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="OldTool\Ctrlext.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="OldTool\DrListView.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="OldTool\DrTreeView.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="OldTool\KDialog32.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UcMemoCompat.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
+    <ClInclude Include="UcOldTool.h">
+      <Filter>OldCode</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="UcTool.cpp">
@@ -113,6 +137,24 @@
     <ClCompile Include="UcJXDoc.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="OldTool\ATMSGBOX.CPP">
+      <Filter>OldCode</Filter>
+    </ClCompile>
+    <ClCompile Include="OldTool\Ctrlext.cpp">
+      <Filter>OldCode</Filter>
+    </ClCompile>
+    <ClCompile Include="OldTool\DrListView.cpp">
+      <Filter>OldCode</Filter>
+    </ClCompile>
+    <ClCompile Include="OldTool\DrTreeView.CPP">
+      <Filter>OldCode</Filter>
+    </ClCompile>
+    <ClCompile Include="OldTool\kdialog32.cpp">
+      <Filter>OldCode</Filter>
+    </ClCompile>
+    <ClCompile Include="UcOldTool.cpp">
+      <Filter>OldCode</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="UcJHandler.inl">
@@ -129,6 +171,9 @@
     </None>
     <None Include="UcStdUsing.inl">
       <Filter>헤더 파일</Filter>
+    </None>
+    <None Include="OldTool\Ctrlext.inl">
+      <Filter>OldCode</Filter>
     </None>
   </ItemGroup>
 </Project>

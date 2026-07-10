@@ -8,10 +8,13 @@
 #ifndef UCDBDYNAMIC_EXPORT
 
 #if defined(UCDB_EXPORTS)
+#pragma message("UCDB_EXPORTS defined: UCDBDYNAMIC = __declspec(dllexport)")
 #define UCDBDYNAMIC __declspec(dllexport)
 #elif defined(UCDB_IMPORTS)
+#pragma message("UCDB_IMPORTS defined: UCDBDYNAMIC = __declspec(dllimport)")
 #define UCDBDYNAMIC __declspec(dllimport)
 #else
+#pragma message("UCDB_EXPORTS/UCDB_IMPORTS not defined: UCDBDYNAMIC = empty")
 #define UCDBDYNAMIC
 #endif
 

@@ -4747,6 +4747,67 @@ inline void CallDocSerializeWithExceptionHandling(TObj* pThis, CJXArchive& ard, 
 	auto& ar = (CJXArchive&)ard
 #endif // _DEBUG
 
+struct UCTOOLDYNAMIC UcDocModeMeta
+{
+	CStringW version;
+	CStringW author;
+	CStringW updated;
+	CStringW filename;
+};
+
+template<typename TDocSerializeFn>
+inline bool UcHandleDocModeSerialize(
+	CDocument* pDoc,
+	CArchive& ar,
+	UcDocModeMeta& meta,
+	const char* sRootKeyUtf8,
+	TDocSerializeFn&& fnDocSerialize,
+	const std::function<CStringW()>& fnNow,
+	const CStringW& sIDE)
+{
+	auto& ard = (CJXArchive&)ar;
+	if (!ard.IsDocMode())
+		return false;
+
+	ard._bBOM = true;
+	ard._afterLoad = [&meta, sRootKeyUtf8](ShJVal shDoc) -> ShJVal {
+		ShJVal root;
+		if (shDoc) {
+			auto& doc = *shDoc->Dic();
+			meta.version = doc.S("version");
+			meta.author = doc.S("author");
+			meta.updated = doc.S("updated");
+			meta.filename = doc.S("filename");
+			root = doc.O(sRootKeyUtf8);
+		}
+		return root;
+		};
+
+	ard._beforeSave = [&meta, &ard, sRootKeyUtf8, fnNow, sIDE](ShJVal shData) -> ShJVal {
+		ASSERT(ard.GetJson().get() == shData.get());
+		ShJVal valRt = make_shared<UcJObj>();
+		auto& jbjRt = *valRt->Dic();
+
+		jbjRt.SetAttr("version", meta.version);
+		jbjRt.SetAttr("author", meta.author);
+		if (fnNow)
+			meta.updated = fnNow();
+		jbjRt.SetAttr("updated", meta.updated);
+		if (!sIDE.IsEmpty())
+			jbjRt.SetAttr("IDE", sIDE);
+		jbjRt.SetAttr("filename", meta.filename);
+
+		jbjRt.Set(sRootKeyUtf8, make_shared<JVal>(shData, false));
+		return make_shared<JVal>(valRt, false);
+		};
+
+	CJXArchive::CSaveLoad saveLoad(ard);
+	fnDocSerialize();
+	if (pDoc)
+		pDoc->SetModifiedFlag(FALSE);
+	return true;
+}
+
 
 struct UCTOOLDYNAMIC Matrix_Temp
 	: public IDocSerialize //#DocSerialize 1

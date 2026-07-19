@@ -4770,6 +4770,7 @@ int UcFileComp(CString sf1, CString sf2)
 //C:\Users\keeps\AppData\Local
 //C:\Users\keeps\AppData\LocalLow
 //	DownloadFiles(L"http://localhost:8000/update/bigfile.exe", fileTmp);
+UCTOOLDYNAMIC
 CStringW UcGetShellFolder(REFKNOWNFOLDERID fid)
 {
 	CStringW fldTemp;
@@ -6726,11 +6727,10 @@ CStringW UcEnumToStr(int val, std::map<int, PWS> mapBitStr)
 
 std::pair<CStringW, CStringW> UcCutToFolderAndFile(CStringW full, WCHAR cut)
 {
-	auto vt = UcCutPath(full, 2, cut);
-	if (vt.size() == 2)
-		return std::make_pair(vt[1], vt[0]);
-	else
-		return {};
+	auto i0 = full.ReverseFind(cut);
+	if (i0 >= 0)
+		return std::make_pair(full.Left(i0), full.Mid(i0 + 1));
+	return std::make_pair(CStringW(), full);
 }
 
 std::tuple<CStringW, CStringW, CStringW> UcCutToTwoFolderAndFile(CStringW full, WCHAR cut)

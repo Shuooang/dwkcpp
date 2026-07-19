@@ -483,14 +483,17 @@ int UcClearSelectedListItem(CListCtrl* pl);
 
 UCTOOLDYNAMIC void UcSetWindowStyle(HWND hWnd, long style, BOOL bSetBit = TRUE, bool bEx = false);
 UCTOOLDYNAMIC void UcSavePosition();
+UCTOOLDYNAMIC BOOL UcLoadPosition(CWnd* pWnd);
 
-void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable = TRUE);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable = TRUE);
 UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable = TRUE);
 UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, std::initializer_list<int> arIdc, BOOL bEnable = TRUE);
-void UcEnableWindow(CWnd* pw, const int* idc, int cnt, BOOL bEnable = TRUE);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, const int* idc, int cnt, BOOL bEnable = TRUE);
 // idc vs BOOL 각각 쌍으로 하는 경우
-void UcEnableWindow(CWnd* pw, const int* idc, BOOL* bEnable, int cnt);
-void UcEnableWindow(CWnd* pw, std::initializer_list<std::pair<int, BOOL>> arIdcBool);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, const int* idc, BOOL* bEnable, int cnt);
+UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, std::initializer_list<std::pair<int, BOOL>> arIdcBool);
+
+
 BOOL UcIsScrollBarAtBottom(CWnd* pWnd, int hFont = 14);
 
 int UcFindStrFromListCtrlItemData(CListCtrl* pList, LPCWSTR sData);

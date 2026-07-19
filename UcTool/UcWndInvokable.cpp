@@ -153,10 +153,12 @@ void DebugShowWindow(CWnd * pw, int nCmdShow)
 }
 
 
+UCTOOLDYNAMIC
 long UcGetCtrlRect(CWnd * pParent, int idc, LPRECT lpRect)
 {
 	return UcGetCtrlRect(pParent, pParent->GetDlgItem(idc), lpRect);
 }
+UCTOOLDYNAMIC
 long UcGetCtrlRect(CWnd * pParent, CWnd * pCtrl, LPRECT lpRect)
 {
 	if (pParent == NULL || pCtrl == NULL || !::IsWindow(pCtrl->GetSafeHwnd())) // 이게 release 에서 디버그없이 실행 
@@ -173,6 +175,7 @@ long UcGetCtrlRect(CWnd * pParent, CWnd * pCtrl, LPRECT lpRect)
 }
 
 
+UCTOOLDYNAMIC
 void UcMoveCtrl(CWnd * wparent, CWnd * ctrl, int cx, int cy)
 {
 	CRect rcw, rcc;
@@ -186,6 +189,7 @@ void UcMoveCtrl(CWnd * wparent, CWnd * ctrl, int cx, int cy)
 	// 	wparent->GetClientRect(rcc);
 
 }
+UCTOOLDYNAMIC
 void UcMoveCtrl(CWnd * wparent, UINT idc, int cx, int cy)
 {
 	CWnd* ctrl = wparent->GetDlgItem(idc);

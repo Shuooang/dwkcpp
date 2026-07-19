@@ -755,8 +755,10 @@ CStringA UcGetErrorMsg(UINT err = 0xffffffff);
 UCTOOLDYNAMIC
 CStringW UcErrorToStrW(UINT err = 0xffffffff);
 
+UCTOOLDYNAMIC
 void UcShowWindow(CWnd* pw, int idc, int eShow);
 
+UCTOOLDYNAMIC
 void UcShowWindow(CWnd* pw, std::initializer_list<int> arIdc, int eShow);
 
 PAS UcShowValueToStr(UINT sv);
@@ -788,6 +790,7 @@ PWS UcWcharToUTF8ToHtmlUrl(CStringW& sWchar, CStringW& sWUrl);
 /// </summary>
 /// <param name="fid"></param>
 /// <returns></returns>
+UCTOOLDYNAMIC
 CStringW UcGetShellFolder(REFKNOWNFOLDERID fid = FOLDERID_LocalAppData);
 bool UcCompareLastMultiSegments(CStringW path1, CStringW path2, int nSegment = 3);
 bool UcCompareFolderWithUrlDir(CStringW sLocalFolder, CStringW sUrlDir);

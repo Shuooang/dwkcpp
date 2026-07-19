@@ -744,17 +744,22 @@ public:
 		if (!pWnd || !::IsWindow(pWnd->GetSafeHwnd()))
 			return;
 
-		// KLambdaTimer 인스턴스 찾기
+		// timer id = _idx(_id*1000) + _idTm → 맵 키로 직접 조회 (dangling 순회 방지)
 		auto& mapId2This = KLambdaTimer::GetMapId2This();
-		for (auto& pair : mapId2This)
+		const INT_PTR idx = static_cast<INT_PTR>((nIDEvent / 1000) * 1000);
+		if (!mapId2This.Has(idx))
+			return;
+
+		KLambdaTimer* pTimer = mapId2This[idx];
+		if (!pTimer || !AfxIsValidAddress(pTimer, sizeof(KLambdaTimer), TRUE))
 		{
-			KLambdaTimer* pTimer = pair.second;
-			if (pTimer && pTimer->_wnd == pWnd)
-			{
-				pTimer->DoTimerTask(nIDEvent);
-				break;
-			}
+			mapId2This.RemoveKey(idx);
+			return;
 		}
+		if (pTimer->_wnd != pWnd)
+			return;
+
+		pTimer->DoTimerTask(nIDEvent);
 	}
 
 	//// 한 번에 타이머 생성 및 설정하는 편의 함수들
@@ -870,9 +875,13 @@ public:
 //		RestartTimer(sid);
 //}
 
+UCTOOLDYNAMIC
 long UcGetCtrlRect(CWnd* pParent, int idc, LPRECT lpRect);
+UCTOOLDYNAMIC
 long UcGetCtrlRect(CWnd* pParent, CWnd* pCtrl, LPRECT lpRect);
+UCTOOLDYNAMIC
 void UcMoveCtrl(CWnd* wparent, CWnd* ctrl, int cx, int cy);
+UCTOOLDYNAMIC
 void UcMoveCtrl(CWnd* wparent, UINT idc, int cx, int cy);
 
 

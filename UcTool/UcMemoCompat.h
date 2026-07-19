@@ -29,6 +29,7 @@ typedef LPCTSTR PS;
 #define KwSeparatePathFile UcSeparatePathFile
 #define KwSetWindowStyle UcSetWindowStyle
 #define KwSavePosition UcSavePosition
+#define KwLoadPosition UcLoadPosition
 #define KwGetCurrentTimeFullString UcGetCurrentTimeString
 #define KwCenterDialog UcCenterDialog
 #define KwGetCenterRect UcGetCenterRect

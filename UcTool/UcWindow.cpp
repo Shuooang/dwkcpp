@@ -42,28 +42,91 @@ void UcSetWindowStyle(HWND hWnd, long style, BOOL bSetBit, bool bEx)
 	SetWindowLong(hWnd, bEx ? GWL_EXSTYLE : GWL_STYLE, lStyleOld);
 }
 
+namespace {
+
+BOOL UcIsWindowRectOnScreen(const RECT& rc)
+{
+	return MonitorFromRect(&rc, MONITOR_DEFAULTTONULL) != NULL;
+}
+
+void UcGetPrimaryDisplayPos100(int& x, int& y)
+{
+	POINT pt = { 0, 0 };
+	HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+	MONITORINFO mi = {};
+	mi.cbSize = sizeof(mi);
+	GetMonitorInfo(hMon, &mi);
+	x = mi.rcWork.left + 100;
+	y = mi.rcWork.top + 100;
+}
+
+} // namespace
+
 void UcSavePosition()
 {
 	CFrameWnd* wnd = (CFrameWnd*)AfxGetMainWnd();
 	if (wnd == NULL)
 		return;
 
-	CRect rc(0, 0, 400, 300);
-	wnd->GetWindowRect(rc);
-	TCHAR buf[128];
+	WINDOWPLACEMENT wp = {};
+	wp.length = sizeof(wp);
+	if (!wnd->GetWindowPlacement(&wp))
+		return;
+
+	CRect rc = wp.rcNormalPosition;
 	int w, h;
-	if (wnd->IsIconic())
+	if (wp.showCmd == SW_SHOWMAXIMIZED)
+	{
+		w = -1;
+		h = -1;
+	}
+	else if (wp.showCmd == SW_SHOWMINIMIZED)
+	{
 		return;
-	else if (wnd->IsZoomed())
-		return;
+	}
 	else
 	{
 		w = rc.Width();
 		h = rc.Height();
 	}
 
+	TCHAR buf[128];
 	swprintf_s(buf, _countof(buf), _T("%d,%d,%d,%d"), rc.left, rc.top, w, h);
 	AfxGetApp()->WriteProfileString(_T("POSITION"), _T("X_Y_W_H"), buf);
+}
+
+BOOL UcLoadPosition(CWnd* pWnd)
+{
+	if (pWnd == NULL)
+		return FALSE;
+
+	CString pos = AfxGetApp()->GetProfileString(_T("POSITION"), _T("X_Y_W_H"), _T("100,100,500,300"));
+	CArray<int, int> xywh;
+	UcCutByTokenInt(pos, _T(", \t"), xywh, true);
+	if (xywh.GetSize() < 4)
+		return FALSE;
+
+	if (xywh[2] == -1 && xywh[3] == -1)
+	{
+		pWnd->ShowWindow(SW_SHOWMAXIMIZED);
+		AfxGetApp()->m_nCmdShow = SW_SHOWMAXIMIZED;
+		return TRUE;
+	}
+
+	if (xywh[2] <= 0 || xywh[3] <= 0)
+		return FALSE;
+
+	int x = xywh[0];
+	int y = xywh[1];
+	int w = xywh[2];
+	int h = xywh[3];
+
+	CRect rc(x, y, x + w, y + h);
+	if (!UcIsWindowRectOnScreen(rc))
+		UcGetPrimaryDisplayPos100(x, y);
+
+	pWnd->MoveWindow(x, y, w, h);
+	return TRUE;
 }
 
 /// sample
@@ -231,6 +294,7 @@ int UcGetSelectedCount(CListCtrl* pl)
 
 
 
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable)
 {
 	//if (pw->GetSafeHwnd() != NULL)
@@ -256,16 +320,22 @@ void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable)
 		UcEnableWindow(pw, ctrl, bEnable);
 	}
 }
+
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, const int* idc, int cnt, BOOL bEnable)
 {
 	for (int i = 0; i < cnt; i++)
 		UcEnableWindow(pw, idc[i], bEnable);
 }
+
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, const int* idc, BOOL* bEnable, int cnt)
 {
 	for (int i = 0; i < cnt; i++)
 		UcEnableWindow(pw, idc[i], bEnable[i]);
 }
+
+UCTOOLDYNAMIC
 void UcEnableWindow(CWnd* pw, std::initializer_list<std::pair<int, BOOL>> arIdcBool)
 {
 	for (auto& ib : arIdcBool)
@@ -289,6 +359,7 @@ void UcShowWindow(CWnd* pw, CWnd* ctrl, int eShow)
 			ctrl->ShowWindow(eShow);
 	}
 }
+UCTOOLDYNAMIC
 void UcShowWindow(CWnd* pw, int idc, int eShow)
 {
 	HWND hpw = NULL;//pw->GetSafeHwnd();
@@ -298,6 +369,7 @@ void UcShowWindow(CWnd* pw, int idc, int eShow)
 		UcShowWindow(pw, ctrl, eShow);
 	}
 }
+UCTOOLDYNAMIC
 void UcShowWindow(CWnd* pw, std::initializer_list<int> arIdc, int eShow)
 {
 	for (auto idc : arIdc)

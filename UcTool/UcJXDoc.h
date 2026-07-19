@@ -4720,8 +4720,8 @@ inline void CallDocSerializeWithExceptionHandling(TObj* pThis, CJXArchive& ard, 
 	try {
 		CJXArchive::CSaveLoad saveload(ard);
 		++(*ard._statck);
-#ifdef _DEBUG
-		CStringA str; str.Format("%s(%d): dwk - arc_stack: [%d] %s\n", pszFile, nLine, *ard._statck, saf.GetString());
+#ifdef _DEBUGx
+		CStringA str; str.Format("%s(%d): dwk- arc_stack: [%d] %s\n", pszFile, nLine, *ard._statck, saf.GetString());
 		OutputDebugStringA(str.GetString());
 #endif // _DEBUG
 		pThis->TObj::DocSerialize(ar);

@@ -2,6 +2,8 @@
 #if CPP17_OR_LATER
 #include <optional>
 #endif
+#include <string>
+#include <vector>
 #include "UcExport.inl"//UCTOOLDYNAMIC
 #include "UcTool.h"
 
@@ -150,7 +152,34 @@ public:
 	}
 	~KLambdaTimer()
 	{
-		//_mapTmObj.DeleteAll();
+		// 활성 Windows 타이머 해제 (HWND가 살아 있을 때만)
+		std::vector<std::string> arSids;
+		arSids.reserve(_mapTmObj.size());
+		for (auto& kv : _mapTmObj)
+			arSids.push_back(kv.first);
+		for (const auto& sid : arSids)
+		{
+			if (!_mapTmID.Has(sid))
+				continue;
+			const UINT_PTR idTm = _mapTmID[sid];
+			if (_wnd && ::IsWindow(_wnd->GetSafeHwnd()))
+				KillTimerEx(idTm);
+			else if (_hWnd && ::IsWindow(_hWnd))
+				::KillTimer(_hWnd, idTm);
+		}
+		_mapTmObj.clear();
+		_mapTmID.clear();
+		_mapRTmID.clear();
+		_mapTimer.clear();
+		_mapTimerFinish.clear();
+
+		// 전역 맵에 남은 this → 문서 닫고 다시 열면 dangling으로 WM_TIMER 크래시
+		auto& mapId2This = GetMapId2This();
+		if (mapId2This.Has(_idx) && mapId2This[_idx] == this)
+			mapId2This.RemoveKey(_idx);
+
+		auto& queTimer = GetQueTimer();
+		queTimer.remove(this);
 	}
 
 	//static inline KStdMap<INT_PTR, KLambdaTimer*> _mapIdThis;

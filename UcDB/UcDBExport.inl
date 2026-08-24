@@ -6,15 +6,16 @@
 /// - 정적 라이브러리만 쓸 때: 둘 다 없음 → 일반 링크
 /// 작업: 링크오류 날 때 마다 하나 씩 붙여 간다.
 #ifndef UCDBDYNAMIC_EXPORT
-
+#include "UcTool/UcPragma.inl"
+// `#pragma message` 대신 `DWKBLD` 을 쓰면 빌드 로그에 파일/라인 표시됨.
 #if defined(UCDB_EXPORTS)
-#pragma message("UCDB_EXPORTS defined: UCDBDYNAMIC = __declspec(dllexport)")
+DWKBLD("UCDB_EXPORTS defined: UCDBDYNAMIC = __declspec(dllexport)")
 #define UCDBDYNAMIC __declspec(dllexport)
 #elif defined(UCDB_IMPORTS)
-#pragma message("UCDB_IMPORTS defined: UCDBDYNAMIC = __declspec(dllimport)")
+DWKBLD("UCDB_IMPORTS defined: UCDBDYNAMIC = __declspec(dllimport)")
 #define UCDBDYNAMIC __declspec(dllimport)
 #else
-#pragma message("UCDB_EXPORTS/UCDB_IMPORTS not defined: UCDBDYNAMIC = empty")
+DWKBLD("UCDB_EXPORTS/UCDB_IMPORTS not defined: UCDBDYNAMIC = empty")
 #define UCDBDYNAMIC
 #endif
 

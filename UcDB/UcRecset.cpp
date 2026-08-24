@@ -273,6 +273,38 @@ void CUcRecset::Close()
 		m_db.Close();
 }
 
+BOOL CUcRecset::EnsureOpen()
+{
+	if (m_db.IsOpen())
+		return TRUE;
+	return Open();
+}
+
+BOOL CUcRecset::TryReopen()
+{
+	Close();
+	return Open();
+}
+
+bool CUcRecset::IsConnectionError() const
+{
+	if (m_lastError.IsEmpty())
+		return !m_db.IsOpen();
+	CStringW e(m_lastError);
+	e.MakeLower();
+	return e.Find(L"연결") >= 0
+		|| e.Find(L"connection") >= 0
+		|| e.Find(L"communication link") >= 0
+		|| e.Find(L"disconnected") >= 0
+		|| e.Find(L"not connected") >= 0
+		|| e.Find(L"열려 있지") >= 0
+		|| e.Find(L"invalid handle") >= 0
+		|| e.Find(L"08s01") >= 0
+		|| e.Find(L"08003") >= 0
+		|| e.Find(L"08001") >= 0
+		|| e.Find(L"im002") >= 0; // driver not found / data source name not found sometimes after drop
+}
+
 //----------------------------------------------------------------------
 // SELECT 절의 필드명을 추출한다.
 // - alias.fName
@@ -418,10 +450,13 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 		SetLastError(L"QueryToTableJson: sql 또는 tableKey 가 비었습니다.");
 		return {};
 	}
-	if (!m_db.IsOpen()) {
-		SetLastError(L"QueryToTableJson: DB 가 열려 있지 않습니다.");
+	if (!EnsureOpen()) {
+		if (m_lastError.IsEmpty())
+			SetLastError(L"QueryToTableJson: DB 가 열려 있지 않습니다.");
 		return {};
 	}
+
+	thread_local int s_qryRetryDepth = 0;
 
 	CUcDynamicRecordset rs(&m_db);
 	try {
@@ -433,13 +468,19 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 	catch (CDBException* e)
 	{
 		m_lastError = e->m_strError;
-		//e->Delete();
+		e->Delete();
 		DWKTRACE(L"CDBException:%v", m_lastError);
+		if (s_qryRetryDepth == 0 && IsConnectionError() && TryReopen()) {
+			++s_qryRetryDepth;
+			auto ret = QueryToTableJson(psql);
+			--s_qryRetryDepth;
+			return ret;
+		}
 		return {};
 	}
 	catch (CException* e)
 	{
-		DWKTRACE(L"CException");
+		DWKTRACE(L"CException"); e;
 		return {};
 	}
 	catch (...) {
@@ -502,7 +543,7 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 			//from tauthclient a 
 			//	join tclients c ON a.fCidClientID = c.fCidClientID
 			//		WHERE c.fIpAddress = '192.168.0.157' and c.fMacAddr = '0A-00-27-00-00-05'
-				_break;
+				_break; e;
 			}
 			catch(...){
 				_break;
@@ -521,9 +562,23 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 	}
 
 	DWKTRACE(L"----------------------------------------------");
+	m_resultTruncated = false;
+	m_fetchedRows = 0;
+	size_t totalBytes = 0;
 	int row = 0;
 	while (!rs.IsEOF())
 	{
+		if (m_maxRow > 0 && row >= m_maxRow) {
+			m_resultTruncated = true;
+			SetLastError(L"QueryToTableJson: 행 수 상한 초과 (LIMIT로 줄이세요)");
+			break;
+		}
+		if (m_maxResultBytes > 0 && totalBytes >= m_maxResultBytes) {
+			m_resultTruncated = true;
+			SetLastError(L"QueryToTableJson: 결과 크기 상한 초과 (LIMIT로 줄이세요)");
+			break;
+		}
+
 		KDefer d_row([&row]() {row++; });
 		auto shRow5 = NEWSHP(UcJArr);
 
@@ -541,14 +596,26 @@ SHP<UcJTable> CUcRecset::QueryToTableJson(LPCWSTR psql)// , LPCWSTR tableKey, Uc
 				rs.Close();
 				return {};
 			}
-			shRow5->Add(CStringW(textValue));
+			const CStringW cellW(textValue);
+			totalBytes += (size_t)cellW.GetLength() * sizeof(wchar_t);
+			shRow5->Add(cellW);
 			//DWKTRACE(L"[%v,%v] %v", row, c, textValue);
 		}
+		if (m_maxResultBytes > 0 && totalBytes > m_maxResultBytes) {
+			m_resultTruncated = true;
+			SetLastError(L"QueryToTableJson: 결과 크기 상한 초과 (LIMIT로 줄이세요)");
+			break;
+		}
 		rows4.Add(NEWSHP(JVal, shRow5, false), false);
+		m_fetchedRows = row + 1;
 		rs.MoveNext();
 	}
 
 	rs.Close();
+	// 상한 초과 시에도 이미 가져온 행은 유지한다.
+	// (예전: return {} → DoQuery 실패 → 목록 DeleteAllItems 후 빈 화면)
+	if (m_resultTruncated && m_fetchedRows <= 0)
+		return {};
 	if (shTbl2 && shTbl2->IsDic())
 		return UcJObj::Table(shTbl2);
 		//return shTbl2->Dic()->Table();
@@ -566,27 +633,33 @@ BOOL CUcRecset::ExecuteCommand(LPCWSTR pSql)//, LPCWSTR logicalKey, LPCWSTR cmdT
 		SetLastError(L"ExecuteCommand: SQL 문이 비었습니다.");
 		return FALSE;
 	}
-	if (!m_db.IsOpen())
+	if (!EnsureOpen())
 	{
-		SetLastError(L"ExecuteCommand: DB 가 열려 있지 않습니다.");
+		if (m_lastError.IsEmpty())
+			SetLastError(L"ExecuteCommand: DB 가 열려 있지 않습니다.");
 		return FALSE;
 	}
 
 	NoteSql(sql);
 	KDefer deferSqlLog([&]() { RecordSqlLog(sql); });
 
-	try
+	for (int attempt = 0; attempt < 2; ++attempt)
 	{
-		m_db.ExecuteSQL(sql);
+		try
+		{
+			m_db.ExecuteSQL(sql);
+			return TRUE;
+		}
+		catch (CDBException* e)
+		{
+			SetLastError(e->m_strError);
+			e->Delete();
+			if (attempt == 0 && IsConnectionError() && TryReopen())
+				continue;
+			return FALSE;
+		}
 	}
-	catch (CDBException* e)
-	{
-		SetLastError(e->m_strError);
-		//DWKFUNCV(L"CDBException: %v", m_lastError);
-		e->Delete();
-		return FALSE;
-	}
-	return TRUE;
+	return FALSE;
 }
 
 BOOL CUcRecset::BeginTransaction()
@@ -663,15 +736,20 @@ BOOL CUcRecset::ExecuteCommandWithParamsImpl(LPCWSTR sql, const UcSqlParam* para
 		SetLastError(L"ExecuteCommandWithParams: SQL 문이 비었습니다.");
 		return FALSE;
 	}
-	if (!m_db.IsOpen()) {
-		SetLastError(L"ExecuteCommandWithParams: DB 가 열려 있지 않습니다.");
+	if (!EnsureOpen()) {
+		if (m_lastError.IsEmpty())
+			SetLastError(L"ExecuteCommandWithParams: DB 가 열려 있지 않습니다.");
 		return FALSE;
 	}
 
 	HDBC hdbc = m_db.GetHdbc();
 	if (!hdbc) {
-		SetLastError(L"ExecuteCommandWithParams: ODBC 연결 핸들이 없습니다.");
-		return FALSE;
+		if (TryReopen())
+			hdbc = m_db.GetHdbc();
+		if (!hdbc) {
+			SetLastError(L"ExecuteCommandWithParams: ODBC 연결 핸들이 없습니다.");
+			return FALSE;
+		}
 	}
 
 	NoteSql(sqlW);

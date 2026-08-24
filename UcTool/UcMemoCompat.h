@@ -30,6 +30,8 @@ typedef LPCTSTR PS;
 #define KwSetWindowStyle UcSetWindowStyle
 #define KwSavePosition UcSavePosition
 #define KwLoadPosition UcLoadPosition
+#define KwSaveWndPosition UcSaveWndPosition
+#define KwLoadWndPosition UcLoadWndPosition
 #define KwGetCurrentTimeFullString UcGetCurrentTimeString
 #define KwCenterDialog UcCenterDialog
 #define KwGetCenterRect UcGetCenterRect

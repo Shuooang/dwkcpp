@@ -4,10 +4,18 @@
 #define FILINDWK(msg) __FILE__ "(" _CRT_STRINGIZE(__LINE__) "): dwk- " msg
 #define FILINREMINDER(msg) __FILE__ "(" _CRT_STRINGIZE(__LINE__) "): REMINDER- " msg
 
+#ifdef _MSC_VER
 #define DWKBLD(msg)      __pragma(message(FILINDWK(msg)))
 #define DWKREMINDER(msg) __pragma(message(FILINREMINDER(msg)))
 #define DWKWARN(msg)     __pragma(message(FILINDWK("warning: "msg)))
 #define DWKINFO(msg)     __pragma(message(FILINDWK("info: "msg)))
+#else
+// GCC/Clang: build-time messages are optional; keep macros compilable.
+#define DWKBLD(msg)
+#define DWKREMINDER(msg)
+#define DWKWARN(msg)
+#define DWKINFO(msg)
+#endif
 //exold: 매크로없이 쓰려면: #pragma message(__FILE__ "(" _CRT_STRINGIZE(__LINE__) "): dwk - " "여기부터 메시지 이러쿵저러쿵.")
 /// 아래는 디버그용 마지막 빌드 마커로 샘플로 남겨 둠.(__pragma는 비표준 MSVC전용)
 #define DWK_LASTWORK   static_assert(false, "dwk: LAST WORKING here")

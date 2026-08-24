@@ -862,15 +862,16 @@ inline void DwkReadIniSettings() //dwk: 2025-03-21 10:07
 #else //_DWKTRACE_TRUE // DWKTRACE
 //#define VOID_VARARGS do { (void)(__VA_ARGS__); } while(0)
 /// 앞에 ... 가 없는데, __VA_ARGS__ 가 있으면 에러 난다. 그래서 아래처럼 한다.
+inline CStringW DummyCString() { return {}; }
 #define DWKSTACDUMP {}
 #define DWKUSETRACE DWKSTACDUMP
 #define DWKFUNC {}
 #define DWKFUNCV(fmt, ...) do { (void)(fmt); } while(0)
 //#define DWKFUNCV(fmt, ...) do{(void)(##__VA_ARGS__);}while(0) //release error
 //#define DWKTRACE(fmt, ...) do{(void)(__VA_ARGS__);}while(0) //release error
-#define DWKTRACE(fmt, ...) {}
-#define DWKKTRACE0(fmt) {}
-#define DWKFUNC0(fmt) {}
+#define DWKTRACE(fmt, ...) DummyCString()
+#define DWKKTRACE0(fmt) DummyCString()
+#define DWKFUNC0(fmt) DummyCString()
 
 #define DWKFUNC_pr {}
 #define DWKFUNC_ac {}

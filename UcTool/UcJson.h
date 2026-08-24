@@ -167,16 +167,22 @@ public:
 	BOOL operator==(const wchar_t* v);
 	BOOL operator==(int v);
 	BOOL operator==(__int64 v);
+	BOOL operator==(unsigned int v);
+	BOOL operator==(UINT64 v);
 	BOOL operator==(double v);
 
 	BOOL operator<(const wchar_t* v);
 	BOOL operator<(int v);
 	BOOL operator<(__int64 v);
+	BOOL operator<(unsigned int v);
+	BOOL operator<(UINT64 v);
 	BOOL operator<(double v);
 
 	BOOL operator>(const wchar_t* v);
 	BOOL operator>(int v);
 	BOOL operator>(__int64 v);
+	BOOL operator>(unsigned int v);
+	BOOL operator>(UINT64 v);
 	BOOL operator>(double v);
 
 
@@ -187,12 +193,16 @@ public:
 	BOOL operator>=(const char* v) { return !operator<(v); }
 	BOOL operator>=(int v) { return !operator<(v); }
 	BOOL operator>=(__int64 v) { return !operator<(v); }
+	BOOL operator>=(unsigned int v) { return !operator<(v); }
+	BOOL operator>=(UINT64 v) { return !operator<(v); }
 	BOOL operator>=(double v) { return !operator<(v); }
 
 	BOOL operator<=(const wchar_t* v) { return !operator>(v); }
 	BOOL operator<=(const char* v) { return !operator>(v); }
 	BOOL operator<=(int v) { return !operator>(v); }
 	BOOL operator<=(__int64 v) { return !operator>(v); }
+	BOOL operator<=(unsigned int v) { return !operator>(v); }
+	BOOL operator<=(UINT64 v) { return !operator>(v); }
 	BOOL operator<=(double v) { return !operator>(v); }
 
 	BOOL operator!=(const wchar_t* v) { return !operator==(v); }
@@ -200,6 +210,8 @@ public:
 	BOOL operator!=(double v) { return !operator==(v); }
 	BOOL operator!=(__int64 v) { return !operator==(v); }
 	BOOL operator!=(int v) { return !operator==(v); }
+	BOOL operator!=(unsigned int v) { return !operator==(v); }
+	BOOL operator!=(UINT64 v) { return !operator==(v); }
 
 
 	void operator+=(const wchar_t* v);//여기서 하면 아직 선언안되 포인터를 쓰게 되므로 옮겨야 { ShJVal sjv = m_pCJobj->Get(m_k); sjv->operator+=(v); }
@@ -220,6 +232,7 @@ public:
 	void operator+=(__int64 v);
 	void operator+=(int v) { operator+=((__int64)v); }
 	void operator+=(unsigned int v) { operator+=((__int64)v); }
+	void operator+=(UINT64 v) { operator+=((__int64)v); }
 
 	void operator+=(CTimeSpan v);
 	void operator+=(COleDateTimeSpan v);
@@ -257,8 +270,8 @@ public:
 	void operator=(std::vector<int>& v);
 	void operator=(std::vector<unsigned int>& v);
 	void operator=(std::vector<INT64>& v);
+	void operator=(std::vector<UINT64>& v);
 	void operator=(std::vector<double>& v);
-	void operator=(std::vector<size_t>& v);
 	void operator=(std::vector<CStringW>& v);
 	void operator=(std::vector<CStringA>& v);
 	void operator=(std::vector<_variant_t>& v);
@@ -271,12 +284,15 @@ public:
 	void operator=(std::list<CStringA>& v);
 #endif
 	void operator=(std::list<int>& v);
+	void operator=(std::list<unsigned int>& v);
 	void operator=(std::list<INT64>& v);
+	void operator=(std::list<UINT64>& v);
 	void operator=(std::list<double>& v);
-	void operator=(std::list<size_t>& v);
 
 	void operator=(CArray<int, int>& v);
+	void operator=(CArray<unsigned int, unsigned int>& v);
 	void operator=(CArray<INT64, INT64>& v);
+	void operator=(CArray<UINT64, UINT64>& v);
 	void operator=(CArray<double, double>& v);
 	void operator=(CArray<TCString<TCHAR>, TCString<TCHAR>>& v);
 #ifdef _MBCS
@@ -291,7 +307,9 @@ public:
 	void operator=(std::map<std::wstring, CStringW>& v);
 	void operator=(std::map<std::wstring, CStringA>& v);
 	void operator=(std::map<std::wstring, int>& v);
+	void operator=(std::map<std::wstring, unsigned int>& v);
 	void operator=(std::map<std::wstring, INT64>& v);
+	void operator=(std::map<std::wstring, UINT64>& v);
 	void operator=(std::map<std::wstring, double>& v);
 	void operator=(std::map<std::wstring, std::vector<std::wstring>>& v);
 
@@ -1516,7 +1534,8 @@ public:
 	void Add(double v);
 	void Add(int v);
 	void Add(INT64 v);
-	void Add(unsigned __int64 v); // size_t 지원
+	void Add(unsigned int v);
+	void Add(unsigned __int64 v);
 	void Add(bool v);
 	void Add(const _variant_t& v);
 	void Add(UcJObj& v, bool bClone = true);
@@ -1666,7 +1685,7 @@ public:
 	explicit JVal(__int64 int64_value1);
 	explicit JVal(unsigned int int_value1);// long과 다름
 	explicit JVal(unsigned __int64 int64_value1);
-	// size_t는 unsigned __int64와 같은 타입일 수 있으므로 별도 오버로드 없음
+	// size_t / DWORD / UINT_PTR 는 비트수에 따라 UINT 또는 UINT64 와 같은 타입이므로 오버로드에 넣지 않음
 	explicit JVal(CTime t);
 	explicit JVal(COleDateTime t);
 
@@ -1686,8 +1705,8 @@ public:
 	explicit JVal(std::vector<int>& jv);
 	explicit JVal(std::vector<unsigned int>& jv);
 	explicit JVal(std::vector<INT64>& jv);
+	explicit JVal(std::vector<UINT64>& jv);
 	explicit JVal(std::vector<double>& jv);
-	explicit JVal(std::vector<size_t>& jv);
 	explicit JVal(std::vector<TCString<TCHAR>>& jv);
 #ifdef _MBCS
 	explicit JVal(std::vector<CStringW>& jv);
@@ -1698,9 +1717,10 @@ public:
 
 	explicit JVal(std::list<std::wstring>& jv);
 	explicit JVal(std::list<int>& jv);
+	explicit JVal(std::list<unsigned int>& jv);
 	explicit JVal(std::list<INT64>& jv);
+	explicit JVal(std::list<UINT64>& jv);
 	explicit JVal(std::list<double>& jv);
-	explicit JVal(std::list<size_t>& jv);
 	explicit JVal(std::list<TCString<TCHAR>>& jv);
 #ifdef _MBCS
 	explicit JVal(std::list<CStringW>& jv);
@@ -1710,7 +1730,9 @@ public:
 	explicit JVal(CStringList& ja);		//dwk: 2025-12-02 11:20 JSON CStringList 지원
 
 	explicit JVal(CArray<int, int>& ja);
+	explicit JVal(CArray<unsigned int, unsigned int>& ja);
 	explicit JVal(CArray<INT64, INT64>& ja);
+	explicit JVal(CArray<UINT64, UINT64>& ja);
 	explicit JVal(CArray<double, double>& ja);
 	explicit JVal(CArray<TCString<TCHAR>, TCString<TCHAR>>& ja);
 #ifdef _MBCS
@@ -1730,7 +1752,9 @@ public:
 
 	explicit JVal(std::map<std::wstring, std::wstring>& jv);
 	explicit JVal(std::map<std::wstring, int>& jv);
+	explicit JVal(std::map<std::wstring, unsigned int>& jv);
 	explicit JVal(std::map<std::wstring, INT64>& jv);
+	explicit JVal(std::map<std::wstring, UINT64>& jv);
 	explicit JVal(std::map<std::wstring, double>& jv);
 	explicit JVal(std::map<std::wstring, CStringW>& jv);
 	explicit JVal(std::map<std::wstring, CStringA>& jv);
@@ -2324,6 +2348,14 @@ inline BOOL JUnit::operator==(__int64 v)
 {
 	return m_pCJobj->I64(m_k) == v;
 }
+inline BOOL JUnit::operator==(unsigned int v)
+{
+	return m_pCJobj->I64(m_k) == (__int64)v;
+}
+inline BOOL JUnit::operator==(UINT64 v)
+{
+	return (UINT64)m_pCJobj->I64(m_k) == v;
+}
 inline BOOL JUnit::operator==(double v)
 {
 	return m_pCJobj->D(m_k) == v;
@@ -2341,6 +2373,14 @@ inline BOOL JUnit::operator<(__int64 v)
 {
 	return m_pCJobj->I64(m_k) < v;
 }
+inline BOOL JUnit::operator<(unsigned int v)
+{
+	return m_pCJobj->I64(m_k) < (__int64)v;
+}
+inline BOOL JUnit::operator<(UINT64 v)
+{
+	return (UINT64)m_pCJobj->I64(m_k) < v;
+}
 inline BOOL JUnit::operator<(double v)
 {
 	return m_pCJobj->D(m_k) < v;
@@ -2357,6 +2397,14 @@ inline BOOL JUnit::operator>(int v)
 inline BOOL JUnit::operator>(__int64 v)
 {
 	return m_pCJobj->I64(m_k) > v;
+}
+inline BOOL JUnit::operator>(unsigned int v)
+{
+	return m_pCJobj->I64(m_k) > (__int64)v;
+}
+inline BOOL JUnit::operator>(UINT64 v)
+{
+	return (UINT64)m_pCJobj->I64(m_k) > v;
 }
 inline BOOL JUnit::operator>(double v)
 {
@@ -3305,22 +3353,25 @@ EXTERN_STATIC std::tuple<
 	std::vector<int>,
 	std::vector<unsigned int>,
 	std::vector<INT64>,
+	std::vector<UINT64>,
 	std::vector<double>,
-	std::vector<size_t>,
 	std::vector<std::string>,
 	std::vector<_variant_t>,
 	std::list<wstring>,
 	std::list<CStringW>,
 	std::list<CStringA>,
 	std::list<int>,
+	std::list<unsigned int>,
 	std::list<INT64>,
+	std::list<UINT64>,
 	std::list<double>,
-	std::list<size_t>,
 	std::map<std::wstring, wstring>,
 	std::map<std::wstring, CStringW>,
 	std::map<std::wstring, CStringA>,
 	std::map<std::wstring, int>,
+	std::map<std::wstring, unsigned int>,
 	std::map<std::wstring, INT64>,
+	std::map<std::wstring, UINT64>,
 	std::map<std::wstring, double>,
 	std::map<std::wstring, std::vector<std::wstring>>
 	//CArray<int, int>,

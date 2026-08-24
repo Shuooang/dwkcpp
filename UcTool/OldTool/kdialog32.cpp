@@ -375,10 +375,10 @@ void KPopupHelp::CalcRect()
         m_arSize.Add(pS);
     }
 
-    m_maxSize = CSize(maxWidth,maxHeight);// 제일 큰 라인..
+    m_maxSize = CSize((int)maxWidth, (int)maxHeight);// 제일 큰 라인..
     maxWidth += ((2*4) + 5); // ?bmWidth? + (2*margin) + shadow
     maxHeight = (maxHeight+3)*m_cbLine + (2*4) + 5; //(m_cbLine+line gab)*m_cbLine + (2*margin) + shadow)
-    m_size = CSize(maxWidth,maxHeight); // 전체.. 크기.
+    m_size = CSize((int)maxWidth, (int)maxHeight); // 전체.. 크기.
     
 // 폰트를 해체 한다.
     if(pOldFont) pDC->SelectObject(pOldFont);

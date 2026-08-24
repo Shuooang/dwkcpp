@@ -297,8 +297,8 @@ CSyncAutoLock::CSyncAutoLock(CSyncObject* pObject, BOOL bInitialLock,
 	: CSingleLock(pObject, FALSE)//FALSE 이므로 여기서 Lock안한다.
 	, m_sFile(sFile)
 	, m_iLine(iLine)
-	, m_sObj(sobj)
 {
+	m_sObj = CStringW(sobj);
 
 	auto pCS = static_cast<CUcCriticalSection*>(m_pObject);
 	const CRITICAL_SECTION& sect = pCS->m_sect;

@@ -7,12 +7,20 @@
 /// 작업: 링크오류 날 때 마다 하나 씩 붙여 간다.
 #ifndef UCTOOLDYNAMIC
 
+#if defined(_WIN32)
 #if defined(UCTOOL_EXPORTS)
 #define UCTOOLDYNAMIC __declspec(dllexport)
 #elif defined(UCTOOL_IMPORTS)
 #define UCTOOLDYNAMIC __declspec(dllimport)
 #else
 #define UCTOOLDYNAMIC
+#endif
+#else
+#if defined(UCTOOL_EXPORTS)
+#define UCTOOLDYNAMIC __attribute__((visibility("default")))
+#else
+#define UCTOOLDYNAMIC
+#endif
 #endif
 
 #endif // !UCTOOLDYNAMIC

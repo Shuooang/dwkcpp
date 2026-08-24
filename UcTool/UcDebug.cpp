@@ -14,12 +14,12 @@
 
 // C++14 호환성을 위한 EXTERN_STATIC 변수 정의
 
-DWKREMINDER("Put GetMapStack() to EXE or DLL Project.")
-
 /// DLL 로  UcTool.dll로 된 경우, GetMapStatck() 함수가 export 가 자동으로 된다.
 /// UcTool이 static lib일때는, 어디선가 GetMapStack() 함수가 정의되어야 한다. (예: App InitInstance가 있는 파일에 주로)
 #ifdef UCTOOL_EXPORTS
 _PUT_THIS_TO_DLL_OR_EXE_
+#else
+DWKREMINDER("_PUT_THIS_TO_DLL_OR_EXE_ : GetMapStack() to EXE or DLL Project.")
 #endif // UCTOOL_EXPORTS
 
 #pragma region thread tag mapping

@@ -51,6 +51,12 @@
     <ClInclude Include="UcWindow.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="UcImageScale.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="UcIconButton.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="UcHash.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -93,6 +99,9 @@
     <ClInclude Include="UcOldTool.h">
       <Filter>OldCode</Filter>
     </ClInclude>
+    <ClInclude Include="UcLinux.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="UcTool.cpp">
@@ -120,6 +129,12 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="UcWindow.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="UcImageScale.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="UcIconButton.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="UcHash.cpp">

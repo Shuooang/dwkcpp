@@ -65,33 +65,21 @@ void KBeginInvoke::freeInvokeFree()
 {
 	CSyncAutoLock __lock(&_csGabage, TRUE, __FUNCTION__, __LINE__, "_csGabage");
 	KPtrList<KBeginInvoke>* pl = getGabage();
-	auto sz = pl->size();
-	int nDeleted = 0;
-	int nNotYet = 0;
-	BOOL bRapped = FALSE;
-	for (ULONGLONG i = 0; i < sz; i++)
+	// _bCalled 된 항목은 최근 2000개만 남기고 앞에서부터 삭제.
+	// (sz - 2000) 을 unsigned 로 쓰면 sz<2000 일 때 언더플로 → 실행 중인 람다까지 삭제됨.
+	while (pl->size() > 2000)
 	{
 		KBeginInvoke* pbi = (KBeginInvoke*)pl->front();
-		if (pbi)
-		{
-			if (pbi->_bCalled)// 수행하기 전에 free된 경우도 있드라.
-			{
-				if (i < (sz - 2000))// 2000개는 항상 남겨 두자.
-				{
-					//TRACE("@@@ CALLED delete, %ld, %s (%d)\n", pbi->_srl, pbi->m_fnc, pbi->m_line);
-					delete pbi;
-					pl->pop_front();
-					nDeleted++;
-				}
-			}
-			else
-			{
-				//TRACE("### NOT CALLED YET, %ld, %s (%d)\n", pbi->_srl, pbi->m_fnc, pbi->m_line);
-				bRapped = TRUE;
-				nNotYet++;
-				break;
-			};
+		if (!pbi) {
+			pl->pop_front();
+			continue;
 		}
+		if (pbi->_bCalled) {
+			delete pbi;
+			pl->pop_front();
+			continue;
+		}
+		break; // 아직 미호출이면 뒤도 대기열일 수 있어 중단
 	}
 }
 

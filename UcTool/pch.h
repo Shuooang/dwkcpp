@@ -9,8 +9,13 @@
 
 // 여기에 미리 컴파일하려는 헤더 추가
 #include "framework.h"
+#ifdef _WIN32
 #include "UcTool.h"
 #include "UcMemoCompat.h"
 #include "UcWndInvokable.h"
+#else
+// Linux: MFC/Win32 UI 헤더는 제외. 코어 유틸만 PCH.
+#include "UcBaseTools.h"
+#endif
 
 #endif //PCH_H

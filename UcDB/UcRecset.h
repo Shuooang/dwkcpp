@@ -109,6 +109,13 @@ public:
 	BOOL Open();
 	void Close();
 
+	/// 닫혀 있으면 Open 재시도. 이미 열려 있으면 TRUE.
+	BOOL EnsureOpen();
+	/// Close 후 연결 문자열로 다시 Open (끊김 복구용).
+	BOOL TryReopen();
+	/// `m_lastError` 가 연결 끊김/핸들 무효 계열인지.
+	bool IsConnectionError() const;
+
 	/// SELECT: `outRoot[tableKey]` 에 `type: table`, `fields`, `rows` 채움 (`13.2`).
 	std::shared_ptr<UcJTable> QueryToTableJson(LPCWSTR sql);// , LPCWSTR tableKey, UcJObj& outRoot);
 	std::list<std::wstring> _lstSql;
@@ -190,6 +197,10 @@ public:
 
 	void ClearResult();
 	void SetMaxRow(int maxRow) { m_maxRow = maxRow; }
+	/// QueryToTableJson 시 셀 텍스트 합산 바이트 상한 (0=무제한). 초과 시 조회 중단.
+	void SetMaxResultBytes(size_t maxBytes) { m_maxResultBytes = maxBytes; }
+	bool WasResultTruncated() const { return m_resultTruncated; }
+	int GetFetchedRowCount() const { return m_fetchedRows; }
 
 	int GetColCount() const;
 	SDWORD GetRowCount() const;
@@ -231,6 +242,9 @@ private:
 	std::vector<std::vector<CStringW>> m_rows;
 	std::vector<std::vector<std::vector<BYTE>>> m_binCells;
 	int m_maxRow{ 0 };
+	size_t m_maxResultBytes{ 0 };
+	bool m_resultTruncated{ false };
+	int m_fetchedRows{ 0 };
 	mutable CStringA m_cellPtrScratch;
 };
 

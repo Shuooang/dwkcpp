@@ -1,5 +1,8 @@
 ﻿#pragma once
+#include "UcLinux.h"
+#ifdef _WIN32
 #include <wtypes.h>
+#endif
 
 #include "UcExport.inl"//UCTOOLDYNAMIC
 
@@ -20,6 +23,7 @@
 #endif
 inline LPCWSTR GetDevIDE()
 {
+#if defined(_MSC_VER)
 #if _MSC_VER >= 1950
 	return L"VS2026";
 #elif _MSC_VER >= 1940
@@ -30,6 +34,13 @@ inline LPCWSTR GetDevIDE()
 	return L"VS2019";
 #else
 	return L"VS(unknown)";
+#endif
+#elif defined(__clang__)
+	return L"clang++";
+#elif defined(__GNUC__)
+	return L"g++";
+#else
+	return L"(unknown)";
 #endif
 }
 
@@ -321,6 +332,7 @@ namespace std {
 // ?? std::shared_mutex 대체
 //-----------------------------------------------------------------------------
 #if CPP_BEFORE_17
+#ifdef _WIN32
 // Boost가 설치되어 있는 경우에만 포함
 //#ifdef BOOST_VERSION
 //#include <boost/thread/shared_mutex.hpp>
@@ -355,7 +367,10 @@ namespace std {
 	};
 }
 //#endif boost
-#endif
+#else
+#include <shared_mutex>
+#endif // _WIN32
+#endif // CPP_BEFORE_17
 
 #define __STD_FUNCTIONW__ std::wstring(__FUNCTIONW__)
 
@@ -425,10 +440,17 @@ inline std::shared_ptr<T> DSHCAST(const std::shared_ptr<U>& ptr) {
 #define DSHCAST1(T, P) std::dynamic_pointer_cast<T>((P))
 //template<typename T>
 //using MSHP = std::make_shared<T>; 안된다.
-
+template<class T, class... Args>
+auto MKSHRD(Args&&... args){
+	return std::make_shared<T>(std::forward<Args>(args)...);
+}
+//auto p = MKSHRD<MyClass>(10, 20);
 /// not used yet
-//#define NEWSH std::make_shared
+#define NEWSH std::make_shared
 #define NEWSHP(TYPE, ...) std::make_shared<TYPE>(__VA_ARGS__)
+
+
+
 typedef std::wstringstream Tss;
 typedef std::stringstream Tas;
 //#define std_endl std::endl
@@ -2756,7 +2778,7 @@ inline bool HasMinLengthW(LPCWSTR s, size_t n)
 
 class ITimerTaskTool {
 public:
-	virtual int DoTimerTask(UINT_PTR nIDEvent) = NULL;
+	virtual int DoTimerTask(UINT_PTR nIDEvent) = 0;
 };
 
 

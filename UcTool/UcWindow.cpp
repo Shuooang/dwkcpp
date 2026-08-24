@@ -67,10 +67,17 @@ void UcSavePosition()
 	CFrameWnd* wnd = (CFrameWnd*)AfxGetMainWnd();
 	if (wnd == NULL)
 		return;
+	UcSaveWndPosition(wnd, _T("POSITION"), _T("X_Y_W_H"));
+}
+
+void UcSaveWndPosition(CWnd* pWnd, LPCTSTR szSection, LPCTSTR szEntry)
+{
+	if (pWnd == NULL || szSection == NULL || szEntry == NULL)
+		return;
 
 	WINDOWPLACEMENT wp = {};
 	wp.length = sizeof(wp);
-	if (!wnd->GetWindowPlacement(&wp))
+	if (!pWnd->GetWindowPlacement(&wp))
 		return;
 
 	CRect rc = wp.rcNormalPosition;
@@ -92,15 +99,24 @@ void UcSavePosition()
 
 	TCHAR buf[128];
 	swprintf_s(buf, _countof(buf), _T("%d,%d,%d,%d"), rc.left, rc.top, w, h);
-	AfxGetApp()->WriteProfileString(_T("POSITION"), _T("X_Y_W_H"), buf);
+	AfxGetApp()->WriteProfileString(szSection, szEntry, buf);
 }
 
 BOOL UcLoadPosition(CWnd* pWnd)
 {
-	if (pWnd == NULL)
+	return UcLoadWndPosition(pWnd, _T("POSITION"), _T("X_Y_W_H"), _T("100,100,500,300"));
+}
+
+BOOL UcLoadWndPosition(CWnd* pWnd, LPCTSTR szSection, LPCTSTR szEntry, LPCTSTR szDefault)
+{
+	if (pWnd == NULL || szSection == NULL || szEntry == NULL)
 		return FALSE;
 
-	CString pos = AfxGetApp()->GetProfileString(_T("POSITION"), _T("X_Y_W_H"), _T("100,100,500,300"));
+	CString pos = AfxGetApp()->GetProfileString(szSection, szEntry,
+		szDefault ? szDefault : _T(""));
+	if (pos.IsEmpty())
+		return FALSE;
+
 	CArray<int, int> xywh;
 	UcCutByTokenInt(pos, _T(", \t"), xywh, true);
 	if (xywh.GetSize() < 4)
@@ -121,12 +137,30 @@ BOOL UcLoadPosition(CWnd* pWnd)
 	int w = xywh[2];
 	int h = xywh[3];
 
-	CRect rc(x, y, x + w, y + h);
-	if (!UcIsWindowRectOnScreen(rc))
-		UcGetPrimaryDisplayPos100(x, y);
+	// UcSaveWndPosition 은 GetWindowPlacement.rcNormalPosition (workspace 좌표)을 저장한다.
+	// MoveWindow 는 screen 좌표라서 왼쪽 작업표시줄 두께만큼 매번 밀린다 → SetWindowPlacement 사용.
+	WINDOWPLACEMENT wp = {};
+	wp.length = sizeof(wp);
+	pWnd->GetWindowPlacement(&wp);
 
-	pWnd->MoveWindow(x, y, w, h);
-	return TRUE;
+	CRect rcWork(x, y, x + w, y + h);
+	// 화면 밖 검사: workspace → 대략 primary work area 기준 screen 으로 변환
+	RECT wa = {};
+	::SystemParametersInfo(SPI_GETWORKAREA, 0, &wa, 0);
+	CRect rcScreen(rcWork);
+	rcScreen.OffsetRect(wa.left, wa.top);
+	if (!UcIsWindowRectOnScreen(rcScreen))
+	{
+		UcGetPrimaryDisplayPos100(x, y);
+		w = 640;
+		h = 480;
+		rcWork.SetRect(x, y, x + w, y + h);
+	}
+
+	wp.flags = 0;
+	wp.showCmd = SW_SHOWNORMAL;
+	wp.rcNormalPosition = rcWork;
+	return pWnd->SetWindowPlacement(&wp);
 }
 
 /// sample

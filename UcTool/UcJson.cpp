@@ -171,6 +171,8 @@ bool UcJObj::LoadSqlBackupFieldNames(vector<PWS>& preFields, LPCWSTR pathToSqlFi
 	return !s_sqlBackupFieldNames.empty();
 }
 
+
+
 BOOL UcJObj::FieldCheckAgainstLoadedSqlBackupFields(const jstring& k)
 {
 	DWKUSETRACE;
@@ -3163,8 +3165,8 @@ void JUnit::operator=(std::vector<std::string>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::vector<int>& v) { SET_SHARED_JVAL(v); }//dwk: 2025-03-06 22:55
 void JUnit::operator=(std::vector<unsigned int>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::vector<INT64>& v) { SET_SHARED_JVAL(v); }//dwk: 2025-03-06 22:55
+void JUnit::operator=(std::vector<UINT64>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::vector<double>& v) { SET_SHARED_JVAL(v); }
-void JUnit::operator=(std::vector<size_t>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::vector<_variant_t>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::vector<TCString<TCHAR>>& v) { SET_SHARED_JVAL(v); }
 #ifdef _MBCS
@@ -3174,9 +3176,10 @@ void JUnit::operator=(std::vector<CStringA>& v) { SET_SHARED_JVAL(v); }
 #endif
 void JUnit::operator=(std::list<std::wstring>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::list<int>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::list<unsigned int>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::list<INT64>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::list<UINT64>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::list<double>& v) { SET_SHARED_JVAL(v); }
-void JUnit::operator=(std::list<size_t>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::list<TCString<TCHAR>>& v) { SET_SHARED_JVAL(v); }
 #ifdef _MBCS
 void JUnit::operator=(std::list<CStringW>& v) { SET_SHARED_JVAL(v); }
@@ -3185,7 +3188,9 @@ void JUnit::operator=(std::list<CStringA>& v) { SET_SHARED_JVAL(v); }
 #endif
 void JUnit::operator=(CStringList& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(CArray<int, int>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(CArray<unsigned int, unsigned int>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(CArray<INT64, INT64>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(CArray<UINT64, UINT64>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(CArray<double, double>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(CArray<TCString<TCHAR>, TCString<TCHAR>>& v) { SET_SHARED_JVAL(v); }
 #ifdef _MBCS
@@ -3199,7 +3204,11 @@ void JUnit::operator=(CArray<CString, const CString&>& v) { SET_SHARED_JVAL(v); 
 void JUnit::operator=(std::map<std::wstring, std::wstring>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::map<std::wstring, CStringW>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::map<std::wstring, int>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::map<std::wstring, unsigned int>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::map<std::wstring, INT64>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::map<std::wstring, UINT64>& v) { SET_SHARED_JVAL(v); }
 void JUnit::operator=(std::map<std::wstring, double>& v) { SET_SHARED_JVAL(v); }
+void JUnit::operator=(std::map<std::wstring, CStringA>& v) { SET_SHARED_JVAL(v); }
 
 void JUnit::operator=(std::map<std::wstring, std::vector<std::wstring>>& v) { SET_SHARED_JVAL(v); }
 
@@ -3671,7 +3680,6 @@ JVal::JVal(unsigned __int64 v1)
 {
 	setUInt64(v1);
 }
-// size_t는 unsigned __int64와 같은 타입일 수 있으므로 별도 구현 없음
 JVal::JVal(CTime v1)
 {
 	setTime(v1);
@@ -3772,17 +3780,10 @@ JVal::JVal(std::vector<std::string>& ja)
 		arr->Add(CStringW(s.c_str())); // std::string을 CStringW로 변환하여 추가
 }
 JVal::JVal(std::vector<int>& ja) { ARRAYTOJARRAY; }
-JVal::JVal(std::vector<unsigned int>& ja)
-{
-	_type = eArr;
-	InitArray();
-	auto arr = this->Arr();
-	for (auto& s : ja)
-		arr->Add(static_cast<unsigned __int64>(s)); // 명시적 캐스팅으로 오버로드 모호성 제거
-}
+JVal::JVal(std::vector<unsigned int>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::vector<INT64>& ja) { ARRAYTOJARRAY; }
+JVal::JVal(std::vector<UINT64>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::vector<double>& ja) { ARRAYTOJARRAY; }
-JVal::JVal(std::vector<size_t>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::vector<TCString<TCHAR>>& ja) { ARRAYTOJARRAY; }
 #ifdef _MBCS
 JVal::JVal(std::vector<CStringW>& ja) { ARRAYTOJARRAY; }
@@ -3803,9 +3804,10 @@ JVal::JVal(std::vector<_variant_t>& ja)
 
 JVal::JVal(std::list<std::wstring>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::list<int>& ja) { ARRAYTOJARRAY; }
+JVal::JVal(std::list<unsigned int>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::list<INT64>& ja) { ARRAYTOJARRAY; }
+JVal::JVal(std::list<UINT64>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::list<double>& ja) { ARRAYTOJARRAY; }
-JVal::JVal(std::list<size_t>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(std::list<TCString<TCHAR>>& ja) { ARRAYTOJARRAY; }
 #ifdef _MBCS
 JVal::JVal(std::list<CStringW>& ja) { ARRAYTOJARRAY; }
@@ -3824,7 +3826,9 @@ JVal::JVal(CStringList& ja)
 	}
 }
 JVal::JVal(CArray<int, int>& ja) { ARRAYTOJARRAY; }
+JVal::JVal(CArray<unsigned int, unsigned int>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(CArray<INT64, INT64>& ja) { ARRAYTOJARRAY; }
+JVal::JVal(CArray<UINT64, UINT64>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(CArray<double, double>& ja) { ARRAYTOJARRAY; }
 JVal::JVal(CArray<TCString<TCHAR>, TCString<TCHAR>>& ja) { ARRAYTOJARRAY; }
 #ifdef _MBCS
@@ -3857,7 +3861,11 @@ JVal::JVal(std::map<std::wstring, std::wstring>& ja)
 	MAPTOJDIC;
 }
 JVal::JVal(std::map<std::wstring, CStringW>& ja) { MAPTOJDIC; }
+JVal::JVal(std::map<std::wstring, CStringA>& ja) { MAPTOJDIC; }
 JVal::JVal(std::map<std::wstring, int>& ja) { MAPTOJDIC; }
+JVal::JVal(std::map<std::wstring, unsigned int>& ja) { MAPTOJDIC; }
+JVal::JVal(std::map<std::wstring, INT64>& ja) { MAPTOJDIC; }
+JVal::JVal(std::map<std::wstring, UINT64>& ja) { MAPTOJDIC; }
 JVal::JVal(std::map<std::wstring, double>& ja) { MAPTOJDIC; }
 JVal::JVal(std::map<std::wstring, std::vector<std::wstring>>& ja) { MAPTOJDIC; }
 
@@ -4612,6 +4620,10 @@ void UcJArr::Add(INT64 v)
 {
 	KArray<ShJVal>::Add(ShJVal(new JVal(v)));
 }
+void UcJArr::Add(unsigned int v)
+{
+	KArray<ShJVal>::Add(ShJVal(new JVal(v)));
+}
 void UcJArr::Add(unsigned __int64 v)
 {
 	KArray<ShJVal>::Add(ShJVal(new JVal(v)));
@@ -5150,22 +5162,25 @@ std::tuple<
 	std::vector<int>,
 	std::vector<unsigned int>,
 	std::vector<INT64>,
+	std::vector<UINT64>,
 	std::vector<double>,
-	std::vector<size_t>,
 	std::vector<std::string>,
 	std::vector<_variant_t>,
 	std::list<wstring>,
 	std::list<CStringW>,
 	std::list<CStringA>,
 	std::list<int>,
+	std::list<unsigned int>,
 	std::list<INT64>,
+	std::list<UINT64>,
 	std::list<double>,
-	std::list<size_t>,
 	std::map<std::wstring, wstring>,
 	std::map<std::wstring, CStringW>,
 	std::map<std::wstring, CStringA>,
 	std::map<std::wstring, int>,
+	std::map<std::wstring, unsigned int>,
 	std::map<std::wstring, INT64>,
+	std::map<std::wstring, UINT64>,
 	std::map<std::wstring, double>,
 	std::map<std::wstring, std::vector<std::wstring>>
 	// CArray는 복사 생성자가 삭제되어 있어서 튜플에 넣을 수 없음. 별도로 체크 필요

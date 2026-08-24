@@ -898,14 +898,15 @@ void KLambdaTimer::SetLambdaTimerImple(LPCSTR sid, UINT elapsed, function<void(L
 {
 	// _wnd가 null이 아닐 때만 _wnd로 적용
 	if (_wnd == nullptr) {
+		TRACE(L"Warning: KLambdaTimer._wnd  == nullptr\n");
 		if (auto* pWnd = dynamic_cast<CWnd*>(this))
 			_wnd = pWnd;
 	}
+	if (_wnd == nullptr)
+		return;
 
 	auto bPtr = AfxIsValidAddress(_wnd, sizeof(CWnd), 0);
 	ASSERT(bPtr);///, KLambdaTimer(this) 생성자에서 안해 줬군.
-	if (_wnd == NULL)
-		return;
 	_hWnd = _wnd->GetSafeHwnd();//지금 널이 아니겠지.
 	UINT_PTR idTm = 0;
 	SHP<KTimerObj> tobj;

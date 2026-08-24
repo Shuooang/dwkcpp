@@ -412,11 +412,47 @@
 #endif
 #endif
 
+/// Ctrl+Z/X/C/V/A 지원.
+/// _bUseXDelAll 이면 EDIT 오른쪽 바깥에 X 버튼 (EDIT 위에 겹치면 마우스 시 가려짐).
 class CEditCtrlCV : public CEdit
 {
 public:
+	bool _bUseXDelAll{ false };
+
+	void EnableXDelAll(bool bEnable = true)
+	{
+		_bUseXDelAll = bEnable;
+		if (!GetSafeHwnd())
+			return;
+		if (_bUseXDelAll) {
+			UpdateXDelAllMargin();
+			SyncXDelAllBtn();
+		} else {
+			SetMargins(0, 0);
+			DestroyXDelAllBtn();
+			Invalidate(FALSE);
+		}
+	}
+
+	void ClearByXDelAll()
+	{
+		if (!GetSafeHwnd())
+			return;
+		SetWindowText(L"");
+		SyncXDelAllBtn();
+		SetFocus();
+	}
+
+	virtual void PreSubclassWindow()
+	{
+		__super::PreSubclassWindow();
+		if (_bUseXDelAll) {
+			UpdateXDelAllMargin();
+			SyncXDelAllBtn();
+		}
+	}
+
 	virtual BOOL PreTranslateMessage(MSG* pMsg)
-		//BOOL CEditCtrlCV::PreTranslateMessage(MSG* pMsg)
 	{
 		switch (pMsg->message)
 		{
@@ -449,6 +485,163 @@ public:
 		}
 		}
 		return __super::PreTranslateMessage(pMsg);
+	}
+
+protected:
+	enum { kXDelAllBtnId = 0x78D1 };
+
+	/// BN_CLICKED 가 다이얼로그로만 가면 놓치므로, 버튼이 직접 클리어 호출
+	class CXDelAllButton : public CButton
+	{
+	public:
+		CEditCtrlCV* _owner{ nullptr };
+		virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+		{
+			if (message == WM_LBUTTONUP && _owner) {
+				const LRESULT r = __super::WindowProc(message, wParam, lParam);
+				_owner->ClearByXDelAll();
+				return r;
+			}
+			return __super::WindowProc(message, wParam, lParam);
+		}
+	};
+	CXDelAllButton _btnXDel;
+
+	int XDelAllMarginPx() const
+	{
+		int dpi = 96;
+		if (GetSafeHwnd()) {
+			HDC hdc = ::GetDC(m_hWnd);
+			if (hdc) {
+				dpi = ::GetDeviceCaps(hdc, LOGPIXELSX);
+				::ReleaseDC(m_hWnd, hdc);
+			}
+		}
+		return MulDiv(18, dpi, 96);
+	}
+
+	void UpdateXDelAllMargin()
+	{
+		// X 는 EDIT 밖(오른쪽)에 두므로 내부 margin 불필요
+		if (!GetSafeHwnd())
+			return;
+		SetMargins(0, 0);
+	}
+
+	/// 부모 좌표 — EDIT 오른쪽 바깥 (겹치면 마우스 시 EDIT 페인트에 가려짐)
+	CRect GetXDelAllRectInParent() const
+	{
+		CRect rc;
+		GetWindowRect(&rc);
+		CWnd* pParent = GetParent();
+		if (pParent)
+			pParent->ScreenToClient(&rc);
+		const int pad = 1;
+		int sz = rc.Height() - pad * 2;
+		if (sz < 12)
+			sz = (rc.Height() > 2) ? (rc.Height() - 2) : rc.Height();
+		CRect btn;
+		btn.left = rc.right + 2;
+		btn.right = btn.left + sz;
+		btn.top = rc.top + pad;
+		btn.bottom = rc.bottom - pad;
+		return btn;
+	}
+
+	void DestroyXDelAllBtn()
+	{
+		if (_btnXDel.GetSafeHwnd())
+			_btnXDel.DestroyWindow();
+	}
+
+	void EnsureXDelAllBtn()
+	{
+		if (!_bUseXDelAll || !GetSafeHwnd() || _btnXDel.GetSafeHwnd())
+			return;
+		CWnd* pParent = GetParent();
+		if (!pParent)
+			return;
+		CRect rc = GetXDelAllRectInParent();
+		_btnXDel._owner = this;
+		_btnXDel.Create(L"X", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+			rc, pParent, kXDelAllBtnId);
+		if (_btnXDel.GetSafeHwnd()) {
+			HFONT hFont = (HFONT)::SendMessage(m_hWnd, WM_GETFONT, 0, 0);
+			if (hFont)
+				_btnXDel.SendMessage(WM_SETFONT, (WPARAM)hFont, TRUE);
+		}
+	}
+
+	void LayoutXDelAllBtn()
+	{
+		if (!_btnXDel.GetSafeHwnd())
+			return;
+		CRect rc = GetXDelAllRectInParent();
+		_btnXDel.SetWindowPos(nullptr, rc.left, rc.top, rc.Width(), rc.Height(),
+			SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+	}
+
+	void SyncXDelAllBtn()
+	{
+		if (!_bUseXDelAll || !GetSafeHwnd())
+			return;
+		EnsureXDelAllBtn();
+		if (!_btnXDel.GetSafeHwnd())
+			return;
+		LayoutXDelAllBtn();
+		_btnXDel.ShowWindow(SW_SHOW);
+		_btnXDel.EnableWindow(TRUE);
+	}
+
+	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+	{
+		if (_bUseXDelAll) {
+			switch (message) {
+			case WM_DESTROY:
+				DestroyXDelAllBtn();
+				break;
+			case WM_SIZE:
+			case WM_MOVE:
+			{
+				const LRESULT r = __super::WindowProc(message, wParam, lParam);
+				LayoutXDelAllBtn();
+				return r;
+			}
+			case WM_SETTEXT:
+			case EM_REPLACESEL:
+			case WM_CHAR:
+			case WM_CUT:
+			case WM_CLEAR:
+			case WM_PASTE:
+			case WM_UNDO:
+			{
+				const LRESULT r = __super::WindowProc(message, wParam, lParam);
+				if (_btnXDel.GetSafeHwnd()) {
+					_btnXDel.ShowWindow(SW_SHOW);
+					_btnXDel.EnableWindow(TRUE);
+				} else {
+					SyncXDelAllBtn();
+				}
+				return r;
+			}
+			case WM_KEYUP:
+				if (wParam == VK_BACK || wParam == VK_DELETE) {
+					const LRESULT r = __super::WindowProc(message, wParam, lParam);
+					if (_btnXDel.GetSafeHwnd())
+						_btnXDel.ShowWindow(SW_SHOW);
+					return r;
+				}
+				break;
+			case WM_ENABLE:
+			{
+				const LRESULT r = __super::WindowProc(message, wParam, lParam);
+				if (_btnXDel.GetSafeHwnd())
+					_btnXDel.EnableWindow(!!wParam);
+				return r;
+			}
+			}
+		}
+		return __super::WindowProc(message, wParam, lParam);
 	}
 };
 
@@ -484,6 +677,8 @@ int UcClearSelectedListItem(CListCtrl* pl);
 UCTOOLDYNAMIC void UcSetWindowStyle(HWND hWnd, long style, BOOL bSetBit = TRUE, bool bEx = false);
 UCTOOLDYNAMIC void UcSavePosition();
 UCTOOLDYNAMIC BOOL UcLoadPosition(CWnd* pWnd);
+UCTOOLDYNAMIC void UcSaveWndPosition(CWnd* pWnd, LPCTSTR szSection, LPCTSTR szEntry);
+UCTOOLDYNAMIC BOOL UcLoadWndPosition(CWnd* pWnd, LPCTSTR szSection, LPCTSTR szEntry, LPCTSTR szDefault = NULL);
 
 UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, CWnd* ctrl, BOOL bEnable = TRUE);
 UCTOOLDYNAMIC void UcEnableWindow(CWnd* pw, int idc, BOOL bEnable = TRUE);

@@ -554,35 +554,27 @@ private:
 		CSyncAutoLock __lock(&s_csGarbage, TRUE, __FUNCTION__, __LINE__, "s_csGarbage");
 		if (!s_pGarbageList) return;
 
-		auto sz = s_pGarbageList->size();
-		for (ULONGLONG i = 0; i < sz; i++)
+		// bCalled 된 항목은 최근 2000개만 남기고 앞에서부터 삭제.
+		// (sz - 2000) 을 unsigned 로 쓰면 sz<2000 일 때 언더플로 → 실행 중인 람다까지 삭제됨.
+		while (s_pGarbageList->size() > 2000)
 		{
 			LambdaData* pData = (LambdaData*)s_pGarbageList->front();
-			if (pData)
-			{
-				if (pData->bCalled)
-				{
-					if (i < (sz - 2000)) // 2000개는 항상 남겨두자
-					{
-						delete pData;
-						s_pGarbageList->pop_front();
-					}
-				}
-				else
-				{
-					// 아직 호출되지 않은 경우, 윈도우가 유효한지 체크
-					if (!::IsWindow(pData->hwnd))
-					{
-						// 윈도우가 닫혔으면 강제로 삭제
-						delete pData;
-						s_pGarbageList->pop_front();
-					}
-					else
-					{
-						break; // 아직 유효한 윈도우가 있으면 중단
-					}
-				}
+			if (!pData) {
+				s_pGarbageList->pop_front();
+				continue;
 			}
+			if (pData->bCalled) {
+				delete pData;
+				s_pGarbageList->pop_front();
+				continue;
+			}
+			// 아직 미호출: 윈도우가 죽었으면 강제 삭제, 아니면 중단(뒤도 대기열일 수 있음)
+			if (!::IsWindow(pData->hwnd)) {
+				delete pData;
+				s_pGarbageList->pop_front();
+				continue;
+			}
+			break;
 		}
 	}
 };
@@ -705,30 +697,6 @@ inline LRESULT SendMainTaskSelf(CWnd* pWnd, std::function<LRESULT(LPVOID)> lambd
 //#define SEND_MAIN_TASK_SELF(lambda) \
 //    SendMainTaskSelfSimple(lambda, __FUNCTION__, __LINE__)
 
-/// WindowProc 가 없는 class 인 경우 WindowProc override를 위한 매크로들
-#define OVERRIDE_WINDOWPROC_FOR_POSTMAINTASK(BaseClass) \
-	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
-	{ \
-		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
-		if (message == WM_USER_INVOKE) \
-			return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
-		if (message == WM_TIMER) \
-			if (auto* timerTool = dynamic_cast<ITimerTaskTool*>(this))\
-					return timerTool->DoTimerTask((UINT)wParam); \
-		return BaseClass::WindowProc(message, wParam, lParam); \
-	}
-
-/// 기존 WindowProc override에 메시지 처리만 윗 부분에 삽입하는 매크로 (함수처럼 사용)
-/// message 추가 //dwk: 2025-10-22 10:55:00
-#define ADD_POSTMAINTASK_TO_WINDOWPROC(message) \
-	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
-	if (message == WM_USER_INVOKE) \
-		return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
-	if (message == WM_TIMER)\
-		if (auto* timerTool = dynamic_cast<ITimerTaskTool*>(this)) \
-			return timerTool->DoTimerTask((UINT)wParam);
 
 // ========================================
 // KLambdaTimer 기능을 CWnd 상속 없이 사용하는 최소한의 코드
@@ -790,47 +758,80 @@ public:
 
 };
 
-// WindowProc override에 타이머 처리 추가하는 매크로
-#define OVERRIDE_WINDOWPROC_FOR_LAMBDATIMER(BaseClass) \
-    virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
-    { \
-		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
-        if (message == WM_USER_INVOKE) \
-            return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
-        if (message == WM_TIMER) \
-            CKLambdaTimerHelper::HandleTimerMessage(this, wParam); \
-        return BaseClass::WindowProc(message, wParam, lParam); \
-    }
 
+
+#ifdef _DEBUGx //타이머 처리만 넣는 경우가 있나?
 // 기존 WindowProc override에 타이머 처리만 추가하는 매크로 (함수처럼 사용)
 #define ADD_LAMBDATIMER_TO_WINDOWPROC() \
 	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) \
+		UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
     if (message == WM_TIMER) \
         CKLambdaTimerHelper::HandleTimerMessage(this, wParam);
 
-// PostMainTask와 LambdaTimer를 모두 처리하는 통합 매크로
+/// WindowProc 에 타이머 처리만 추가
+#define OVERRIDE_WINDOWPROC_FOR_LAMBDATIMER(BaseClass) \
+	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override { \
+			ADD_LAMBDATIMER_TO_WINDOWPROC();\
+			if (message == WM_USER_INVOKE) \
+				return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
+			return BaseClass::WindowProc(message, wParam, lParam); \
+    }
+#endif // _DEBUGx 타이머 처리만 넣는 경우가 있나?
+
+/// =========================================================================
+/// 타이머는
+/// 멤버변수 방법: SHP<KLambdaTimer> _timer; // CWnd* 를 전달 해야
+/// 계승하는 방법: class CTopWatchDlg : public CDialogEx , public KLambdaTimer
+/// =========================================================================
+
+
+/// 기존 WindowProc에 PostMessage만 삽입
+#define ADD_POSTMAINTASK_TO_WINDOWPROC() \
+	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) \
+		UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_USER_INVOKE) \
+		return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
+	if (message == WM_TIMER)\
+		if (auto* timerTool = dynamic_cast<ITimerTaskTool*>(this)) \
+			return timerTool->DoTimerTask((UINT)wParam);
+
+/// WindowProc 가 없는 경우 PostMessage만 삽입
+#define OVERRIDE_WINDOWPROC_FOR_POSTMAINTASK(BaseClass) \
+	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
+	{ \
+		ADD_POSTMAINTASK_TO_WINDOWPROC();\
+		return BaseClass::WindowProc(message, wParam, lParam); \
+	}
+
+
+// 기존 WindowProc에 PostMessage 와 Timer 둘다 추가
+#define ADD_ALL_TO_WINDOWPROC() \
+	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_NCDESTROY) \
+		UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
+	if (message == WM_USER_INVOKE) \
+		return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
+	if (message == WM_TIMER) \
+		CKLambdaTimerHelper::HandleTimerMessage(this, wParam);
+
+
+/// WindowProc 가 없는 경우 PostMessage 와 Timer 둘다 추가
 #define OVERRIDE_WINDOWPROC_FOR_ALL(BaseClass) \
     virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam) override \
     { \
-		UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-		if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
-        if (message == WM_USER_INVOKE) \
-            return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
-        if (message == WM_TIMER) \
-            CKLambdaTimerHelper::HandleTimerMessage(this, wParam); \
-        return BaseClass::WindowProc(message, wParam, lParam); \
+			ADD_ALL_TO_WINDOWPROC();\
+			return BaseClass::WindowProc(message, wParam, lParam); \
     }
+/// 샘플
+//class CVLdrShortVu : public CFormView
+//{ ...
+//	OVERRIDE_WINDOWPROC_FOR_ALL(CFormView);
+//	SHP<KLambdaTimer> _timer;
+//	...
+//};
 
-// 기존 WindowProc override에 모든 처리 추가하는 매크로 (함수처럼 사용)
-#define ADD_ALL_TO_WINDOWPROC() \
-	UcMarkPostMainTaskWindow(GetSafeHwnd()); \
-	if (message == WM_NCDESTROY) UcUnmarkPostMainTaskWindow(GetSafeHwnd()); \
-    if (message == WM_USER_INVOKE) \
-        return CPostMainTaskHelper::HandleInvokeMessage(GetSafeHwnd(), wParam, lParam); \
-    if (message == WM_TIMER) \
-        CKLambdaTimerHelper::HandleTimerMessage(this, wParam);
 
 // ========================================
 // 편의 함수들 - 한 번에 타이머 생성 및 설정

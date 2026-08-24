@@ -226,6 +226,7 @@ public:
 	///	}, 0);
 	/// #KLambdaTimer 1,2,3
 	/// SHP<KLambdaTimer> _timer;
+	/// SHP<KLambdaTimer> _timer{ std::make_shared<KLambdaTimer>(this) };
 	/// _timer = NEWSHP(KLambdaTimer, this);
 	/// int count = 6;// count == 0 이면 계속 반복
 	/// _timer->SetTimerLambda("reg", 500, [this, doc](auto ato) {
@@ -292,6 +293,7 @@ public:
 
 #ifdef _timer_sample_ //#KLambdaTimer 1,2,3
 	SHP<KLambdaTimer> _timer;
+	/// SHP<KLambdaTimer> _timer{  NEWSHP(KLambdaTimer, this) };
 	_timer = NEWSHP(KLambdaTimer, this);
 	int count = 6;// count == 0 이면 계속 반복
 	_timer->SetTimerLambda("reg", 500, [this, doc](auto ato) {

@@ -4594,9 +4594,95 @@ PWS UcUTF8ToHtmlUrl(CStringA& sUtf8, CStringW& sWstr)
 	return sWstr;
 }
 #define UCVARFORMAT
+
+// printf 변환 지정자가 유효한지 검사. 유효하지 않으면 CRT(_vsnwprintf_s)에 넘기지 말고 원문 사용.
+static bool UcPrintfFormatLooksValid(LPCWSTR fmt)
+{
+	if (!fmt)
+		return true;
+	for (const wchar_t* p = fmt; *p; ++p) {
+		if (*p != L'%')
+			continue;
+		++p;
+		if (*p == L'%')
+			continue; // %%
+		if (*p == L'\0')
+			return false; // trailing %
+
+		while (*p == L'-' || *p == L'+' || *p == L'0' || *p == L'#' || *p == L' ')
+			++p;
+		if (*p == L'*')
+			++p;
+		else
+			while (iswdigit(*p))
+				++p;
+		if (*p == L'.') {
+			++p;
+			if (*p == L'*')
+				++p;
+			else
+				while (iswdigit(*p))
+					++p;
+		}
+		if (*p == L'h') {
+			++p;
+			if (*p == L'h')
+				++p;
+		}
+		else if (*p == L'l') {
+			++p;
+			if (*p == L'l')
+				++p;
+		}
+		else if (*p == L'L' || *p == L'w' || *p == L'z' || *p == L't' || *p == L'j') {
+			++p;
+		}
+		else if (*p == L'I') {
+			++p;
+			if (*p == L'3' && p[1] == L'2')
+				p += 2;
+			else if (*p == L'6' && p[1] == L'4')
+				p += 2;
+		}
+
+		static const wchar_t kSpecs[] = L"cCdiouxXeEfFgGaAnpsSZ";
+		if (!*p || !wcschr(kSpecs, *p))
+			return false;
+	}
+	return true;
+}
+
+static bool UcPrintfFormatNeedsArgs(LPCWSTR fmt)
+{
+	if (!fmt)
+		return false;
+	for (const wchar_t* p = fmt; *p; ++p) {
+		if (*p != L'%')
+			continue;
+		++p;
+		if (*p == L'%')
+			continue;
+		return true;
+	}
+	return false;
+}
+
 UCTOOLDYNAMIC
 CStringW UcFormatStringFromArgs(LPCWSTR fmt, va_list args) {
+	if (!fmt)
+		return CStringW();
+	// 잘못된 % (예: 비밀번호 규칙의 %^) 또는 trailing % → CRT assert/crash 방지, 원문 반환
+	if (!UcPrintfFormatLooksValid(fmt))
+		return CStringW(fmt);
+	if (!UcPrintfFormatNeedsArgs(fmt)) {
+		if (!wcschr(fmt, L'%'))
+			return CStringW(fmt);
+		// %% 만 있는 경우: 인자 없이 CRT 호출 가능
+	}
+
 	int size = _vscwprintf(fmt, args) + 1;  // +1 for null terminator
+	if (size <= 0)
+		return CStringW(fmt);
 	CStringW buffer;
 	wchar_t* tempBuffer = buffer.GetBuffer(size);
 	if (tempBuffer) {
@@ -4610,6 +4696,15 @@ CStringW UcMessageBoxStatic::s_title;
 HWND UcMessageBoxStatic::s_hWndParent = NULL;
 
 /// <param name="nType">MB_OK</param>
+UCTOOLDYNAMIC
+int UcMessageBoxGeneralLiteral(UINT nType, LPCWSTR msg)
+{
+	CStringW buffer(msg ? msg : L"");
+	if (UcMessageBoxStatic::s_title.GetLength())
+		return MessageBoxW(UcMessageBoxStatic::s_hWndParent, buffer, UcMessageBoxStatic::s_title, nType);
+	return AfxMessageBox(CString(buffer), nType);
+}
+
 UCTOOLDYNAMIC
 int UcMessageBoxGeneral(UINT nType, LPCWSTR fmt, ...)
 {
@@ -4647,11 +4742,25 @@ CStringW GetFileLineW(LPCWSTR f, int l, LPCWSTR sTrace, LPCWSTR fmt, ...)
 	//sfmt.Format(L"%s(%d):%s- ", f, l, sTrace);
 	sfmt += fmt;
 	va_list args;
-	va_start(args, (PWS)fmt);// ... 앞에 파라미터를 준다.  warning C5082: second argument to 'va_start' is not the last named parameter
+	va_start(args, fmt);
 
 	CStringW buffer = UcFormatStringFromArgs((PWS)sfmt, args);
 	va_end(args);
 	//CStringW str = DwkFormat((PWS)sfmt, ##__VA_ARGS__);
+	return buffer;
+}
+
+UCTOOLDYNAMIC
+CStringW UcMessageBoxGeneralStrLiteral(UINT nType, LPCWSTR msg)
+{
+	CStringW buffer(msg ? msg : L"");
+	if (nType & (MB_ICONSTOP | MB_ICONWARNING)) {
+		no_throw_str1(buffer); // 포맷 없이 원문 로그 (DwkFormat/% 이슈 회피)
+	}
+	if (UcMessageBoxStatic::s_title.GetLength())
+		MessageBoxW(UcMessageBoxStatic::s_hWndParent, buffer, UcMessageBoxStatic::s_title, nType);
+	else
+		AfxMessageBox(CString(buffer), nType);
 	return buffer;
 }
 
@@ -4663,7 +4772,7 @@ CStringW UcMessageBoxGeneralStr(UINT nType, LPCWSTR fmt, ...)
 	CStringW buffer = UcFormatStringFromArgs(fmt, args);
 	va_end(args);
 	if (nType & (MB_ICONSTOP | MB_ICONWARNING)) {
-		no_throw_str(buffer);
+		no_throw_str1(buffer); // 이미 포맷된 결과이므로 재포맷하지 않음
 	}
 	if (UcMessageBoxStatic::s_title.GetLength())
 		MessageBoxW(UcMessageBoxStatic::s_hWndParent, buffer, UcMessageBoxStatic::s_title, nType);

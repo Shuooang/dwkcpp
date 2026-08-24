@@ -3,7 +3,7 @@
 			if (j1.Has(k2)) {\
 				auto& jarr = j1.GetArray(k2.c_str()); \
 				for (auto& jv : jarr) \
-					sarr.push_back(jv->Val()->ASVAL());\
+					sarr.push_back((TYPE)jv->Val()->ASVAL());\
 		}}}
 #define VECTORGEN(TYPE, ASVAL) ListGEN(std::vector, TYPE, ASVAL)
 #define KArrayGEN(TYPE, ASVAL) ListGEN(KArray, TYPE, ASVAL)
@@ -18,7 +18,7 @@
 				for (auto& kjv : jbj){\
 					auto& k = kjv.first;\
 					auto& jv = kjv.second;\
-					smap[k] = jv->Val()->ASVAL();}\
+					smap[k] = (TYPE)jv->Val()->ASVAL();}\
 		}}}
 #define KStdMapGEN(TKEY, TYPE, ASVAL) MapGEN(KStdMap, TKEY, TYPE, ASVAL)
 #define STDMAPGEN(TKEY, TYPE, ASVAL) MapGEN(std::map, TKEY, TYPE, ASVAL)
@@ -53,12 +53,15 @@ std::unordered_map<std::type_index, std::function<void(UcJObj&, wstring, void*)>
 			if (j1.Has(k2)) {\
 				auto& jarr = j1.GetArray(k2.c_str()); \
 				for (auto& jv : jarr) \
-					sarr.Add(jv->Val()->ASVAL());\
+					sarr.Add((TYPE)jv->Val()->ASVAL());\
 		}}}
 #define CArrayGEN(TYPE, ASVAL) MfcArrayGEN(CArray, TYPE, ASVAL)
 	CArrayGEN(CStringW, S),
 	CArrayGEN(CStringA, SA),
 	CArrayGEN(int, I),
+	CArrayGEN(unsigned int, AsInt64),
+	CArrayGEN(INT64, AsInt64),
+	CArrayGEN(UINT64, AsInt64),
 	CArrayGEN(double, D),
 	//{ typeid(CArray<CStringW>), [](UcJObj& j1, wstring k2, void* v3) {
 	//	auto& sarr = *((CArray<CStringW>*)v3); sarr.RemoveAll();
@@ -122,14 +125,17 @@ std::unordered_map<std::type_index, std::function<void(UcJObj&, wstring, void*)>
 	//ListGEN(std::vector, double, AsDouble)
 #endif // _DEBUG
 	VECTORGEN(INT64       , AsInt64),
-	VECTORGEN(size_t      , AsInt64),
+	VECTORGEN(unsigned int, AsInt64),
+	VECTORGEN(UINT64      , AsInt64),
 
 	KArrayGEN(std::wstring, AsString),
 	KArrayGEN(CStringW    , S),
 	KArrayGEN(CStringA    , SA),
 	KArrayGEN(int         , AsInt),
+	KArrayGEN(unsigned int, AsInt64),
 	KArrayGEN(double      , AsDouble),
 	KArrayGEN(INT64       , AsInt64),
+	KArrayGEN(UINT64      , AsInt64),
 
 	//KListGEN(std::wstring, AsString),
 		{ typeid(KList<std::wstring>), [](UcJObj& j1, wstring k2, void* v3) {
@@ -152,8 +158,10 @@ std::unordered_map<std::type_index, std::function<void(UcJObj&, wstring, void*)>
 				sarr.push_back(jv->Val()->SA());
 		}}},
 	KListGEN(int         , AsInt),
+	KListGEN(unsigned int, AsInt64),
 	KListGEN(double      , AsDouble),
 	KListGEN(INT64       , AsInt64),
+	KListGEN(UINT64      , AsInt64),
 
 	STDListGEN(std::wstring, AsString),
 	STDListGEN(CStringW, S),
@@ -167,23 +175,28 @@ std::unordered_map<std::type_index, std::function<void(UcJObj&, wstring, void*)>
 		}},//#define STDListGEN(CStringA, SA) ListGEN(std::list, CStringA, SA)
 	//STDListGEN(CStringA, SA),
 	STDListGEN(int, AsInt),
+	STDListGEN(unsigned int, AsInt64),
 	STDListGEN(double, AsDouble),
 	STDListGEN(INT64, AsInt64),
-	STDListGEN(size_t, AsInt64),
+	STDListGEN(UINT64, AsInt64),
 
 	KStdMapGEN(std::wstring, std::wstring, AsString),
 	KStdMapGEN(std::wstring, CStringW, S),
 	KStdMapGEN(std::wstring, CStringA, SA),
 	KStdMapGEN(std::wstring, int, AsInt),
+	KStdMapGEN(std::wstring, unsigned int, AsInt64),
 	KStdMapGEN(std::wstring, double, AsDouble),
 	KStdMapGEN(std::wstring, INT64, AsInt64),
+	KStdMapGEN(std::wstring, UINT64, AsInt64),
 
 	STDMAPGEN(std::wstring, std::wstring, AsString),
 	STDMAPGEN(std::wstring, CStringW, S),
 	STDMAPGEN(std::wstring, CStringA, SA),
 	STDMAPGEN(std::wstring, int, AsInt),
+	STDMAPGEN(std::wstring, unsigned int, AsInt64),
 	STDMAPGEN(std::wstring, double, AsDouble),
 	STDMAPGEN(std::wstring, INT64, AsInt64),
+	STDMAPGEN(std::wstring, UINT64, AsInt64),
 	{ typeid(std::map<std::wstring, std::vector<std::wstring>>), [](UcJObj& j1, wstring k2, void* v3) {
 		auto& smap = *((std::map<std::wstring, std::vector<std::wstring>>*)v3); smap.clear();
 		auto shObj = j1.O(k2.c_str());
